@@ -494,11 +494,25 @@ def create_reservation(
         close_time = datetime.strptime(day_hours.close, "%H:%M").time()
         reservation_time = reservation_datetime.time()
         
-        if reservation_time < open_time or reservation_time >= close_time:
-            return ReservationResult(
-                success=False,
-                message=f"Reservations are only available during operating hours: {day_hours.open} - {day_hours.close}"
-            )
+        # Handle midnight closing time (00:00 means end of day, not start)
+        # If close_time is 00:00, it means the restaurant closes at midnight
+        # In this case, any time after open_time is valid
+        closes_at_midnight = (close_time.hour == 0 and close_time.minute == 0)
+        
+        if closes_at_midnight:
+            # Restaurant closes at midnight - only check if after opening time
+            if reservation_time < open_time:
+                return ReservationResult(
+                    success=False,
+                    message=f"Reservations are only available during operating hours: {day_hours.open} - {day_hours.close} (midnight)"
+                )
+        else:
+            # Normal hours - check both open and close times
+            if reservation_time < open_time or reservation_time >= close_time:
+                return ReservationResult(
+                    success=False,
+                    message=f"Reservations are only available during operating hours: {day_hours.open} - {day_hours.close}"
+                )
         
         # Get current timestamp for time_created
         time_created = datetime.now(ZAGREB_TZ)
@@ -747,6 +761,27 @@ def update_reservation(
                     success=False,
                     message=f"Sorry, the restaurant is closed on {day_name.capitalize()}s."
                 )
+            
+            # Check if time is within operating hours
+            open_time = datetime.strptime(day_hours.open, "%H:%M").time()
+            close_time = datetime.strptime(day_hours.close, "%H:%M").time()
+            reservation_time = new_datetime.time()
+            
+            # Handle midnight closing time (00:00 means end of day, not start)
+            closes_at_midnight = (close_time.hour == 0 and close_time.minute == 0)
+            
+            if closes_at_midnight:
+                if reservation_time < open_time:
+                    return ReservationResult(
+                        success=False,
+                        message=f"Reservations are only available during operating hours: {day_hours.open} - {day_hours.close} (midnight)"
+                    )
+            else:
+                if reservation_time < open_time or reservation_time >= close_time:
+                    return ReservationResult(
+                        success=False,
+                        message=f"Reservations are only available during operating hours: {day_hours.open} - {day_hours.close}"
+                    )
             
             update_data['date_time'] = new_datetime
         
