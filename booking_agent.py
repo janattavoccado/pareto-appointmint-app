@@ -888,3 +888,95 @@ if __name__ == "__main__":
         print(f"   Agent: {response[:200]}...")
         
     asyncio.run(test())
+
+
+# ============================================================================
+# Chatwoot Integration - Synchronous Message Processing
+# ============================================================================
+
+# Store conversation histories by user_id (in production, use Redis or database)
+_conversation_histories: dict = {}
+
+
+def process_booking_message(
+    message: str,
+    user_id: str,
+    user_name: str = None,
+    phone_number: str = None
+) -> str:
+    """
+    Process a booking message from Chatwoot webhook.
+    
+    This function maintains conversation history per user and processes
+    messages synchronously for webhook integration.
+    
+    Args:
+        message: The user's message text
+        user_id: Unique identifier for the user (phone number or contact ID)
+        user_name: User's name (optional, for personalization)
+        phone_number: User's phone number (optional)
+        
+    Returns:
+        Agent's response text
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Get or create conversation history for this user
+        if user_id not in _conversation_histories:
+            _conversation_histories[user_id] = []
+            logger.info(f"New conversation started for user: {user_id}")
+        
+        conversation_history = _conversation_histories[user_id]
+        
+        # Add context about the user if this is a new conversation
+        if not conversation_history and (user_name or phone_number):
+            context_message = f"[System: User info - Name: {user_name or 'Unknown'}, Phone: {phone_number or 'Unknown'}]"
+            conversation_history.append({
+                "role": "system",
+                "content": context_message
+            })
+        
+        # Run the agent synchronously
+        response, updated_history = run_booking_agent_sync(message, conversation_history)
+        
+        # Update stored history
+        _conversation_histories[user_id] = updated_history
+        
+        # Limit history size to prevent memory issues (keep last 20 exchanges)
+        if len(_conversation_histories[user_id]) > 40:
+            _conversation_histories[user_id] = _conversation_histories[user_id][-40:]
+        
+        logger.info(f"Agent response generated for user {user_id}: {response[:100]}...")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error processing booking message: {e}", exc_info=True)
+        return f"I apologize, but I encountered an error processing your request. Please try again or contact the restaurant directly."
+
+
+def clear_user_conversation(user_id: str) -> bool:
+    """
+    Clear conversation history for a specific user.
+    
+    Args:
+        user_id: The user's identifier
+        
+    Returns:
+        True if history was cleared, False if user not found
+    """
+    if user_id in _conversation_histories:
+        del _conversation_histories[user_id]
+        return True
+    return False
+
+
+def get_active_conversations() -> list:
+    """
+    Get list of active conversation user IDs.
+    
+    Returns:
+        List of user IDs with active conversations
+    """
+    return list(_conversation_histories.keys())

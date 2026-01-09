@@ -1,11 +1,13 @@
 """
 Flask Application for Restaurant Booking Agent.
 Provides web interface for interacting with the OpenAI-powered booking agent.
+Includes Chatwoot webhook integration for WhatsApp messaging.
 """
 
 import os
 import asyncio
 import uuid
+import logging
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
@@ -13,6 +15,13 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Import the booking agent
 from booking_agent import run_booking_agent, booking_agent
@@ -23,7 +32,7 @@ from knowledgebase_manager import KnowledgeBaseManager
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Enable CORS for future API integrations (e.g., Chatwoot webhook)
+# Enable CORS for API integrations (e.g., Chatwoot webhook)
 CORS(app)
 
 # Initialize database
@@ -152,6 +161,7 @@ def chat():
         })
         
     except Exception as e:
+        logger.error(f"Chat error: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -236,7 +246,7 @@ def get_restaurant_info():
 
 
 @app.route('/api/operating-hours', methods=['GET'])
-def get_operating_hours():
+def get_operating_hours_api():
     """Get operating hours from knowledge base."""
     try:
         hours = kb.get_operating_hours()
@@ -296,38 +306,45 @@ def search_menu():
 
 
 # ============================================================================
-# Future: Chatwoot Webhook Endpoint
+# Chatwoot Webhook Endpoint
 # ============================================================================
 
-@app.route('/webhook/chatwoot', methods=['POST'])
+@app.route('/api/chatwoot/webhook', methods=['POST'])
 def chatwoot_webhook():
     """
     Webhook endpoint for Chatwoot integration.
-    This will be implemented when connecting to Chatwoot inbox.
-    """
-    # TODO: Implement Chatwoot webhook handling
-    # 1. Verify webhook signature
-    # 2. Parse incoming message
-    # 3. Process with booking agent
-    # 4. Send response back to Chatwoot
+    Handles incoming messages from WhatsApp via Chatwoot.
     
+    URL: https://your-app.herokuapp.com/api/chatwoot/webhook
+    """
     try:
-        data = request.get_json()
+        payload = request.get_json()
         
-        # Log incoming webhook for debugging
-        print(f"Received Chatwoot webhook: {data}")
+        if not payload:
+            logger.warning("Empty Chatwoot webhook payload received")
+            return jsonify({"error": "Empty payload"}), 400
         
-        # Placeholder response
-        return jsonify({
-            'success': True,
-            'message': 'Webhook received - Chatwoot integration pending'
-        })
+        # Import and use the webhook handler
+        from chatwoot_handler import webhook_handler
+        
+        # Process the webhook
+        result = webhook_handler(payload)
+        
+        return jsonify(result)
         
     except Exception as e:
+        logger.error(f"Chatwoot webhook error: {e}", exc_info=True)
         return jsonify({
-            'success': False,
-            'error': str(e)
+            'status': 'error',
+            'message': str(e)
         }), 500
+
+
+# Legacy webhook endpoint (for backwards compatibility)
+@app.route('/webhook/chatwoot', methods=['POST'])
+def chatwoot_webhook_legacy():
+    """Legacy webhook endpoint - redirects to new endpoint."""
+    return chatwoot_webhook()
 
 
 # ============================================================================
@@ -341,7 +358,8 @@ def health_check():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
         'service': 'Restaurant Booking Agent',
-        'restaurant': kb.get_restaurant_name()
+        'restaurant': kb.get_restaurant_name(),
+        'chatwoot_configured': bool(os.getenv('CHATWOOT_API_ACCESS_TOKEN'))
     })
 
 
@@ -373,11 +391,13 @@ def internal_error(error):
 
 if __name__ == '__main__':
     # Get configuration from environment
-    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
-    host = os.getenv('FLASK_HOST', '127.0.0.1')
-    port = int(os.getenv('FLASK_PORT', 5000))
+    # Heroku sets PORT environment variable
+    debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    host = os.getenv('FLASK_HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', os.getenv('FLASK_PORT', 5000)))
     
     restaurant_name = kb.get_restaurant_name()
+    chatwoot_configured = bool(os.getenv('CHATWOOT_API_ACCESS_TOKEN'))
     
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
@@ -386,12 +406,17 @@ if __name__ == '__main__':
 ║  Server running at: http://{host}:{port}                      
 ║  Debug mode: {debug}                                          
 ║  Restaurant: {restaurant_name}
+║  Chatwoot: {'Configured' if chatwoot_configured else 'Not configured'}
 ║                                                              
 ║  Pages:                                                      
 ║    - Home/Chat: http://{host}:{port}/                        
 ║    - About Us:  http://{host}:{port}/about                   
 ║    - Menu:      http://{host}:{port}/menu                    
 ║    - Contact:   http://{host}:{port}/contact                 
+║                                                              
+║  API Endpoints:                                              
+║    - Chatwoot Webhook: /api/chatwoot/webhook                 
+║    - Health Check:     /health                               
 ╚══════════════════════════════════════════════════════════════╝
     """)
     
