@@ -23,9 +23,15 @@ class MemoryEntry(BaseModel):
     id: str = Field(description="Unique memory ID")
     memory: str = Field(description="The memory content")
     user_id: Optional[str] = Field(default=None, description="User identifier")
-    categories: List[str] = Field(default_factory=list, description="Memory categories")
+    categories: Optional[List[str]] = Field(default=None, description="Memory categories")
     created_at: Optional[str] = Field(default=None, description="Creation timestamp")
     score: Optional[float] = Field(default=None, description="Relevance score")
+    
+    def __init__(self, **data):
+        # Handle None categories from Mem0 API
+        if 'categories' in data and data['categories'] is None:
+            data['categories'] = []
+        super().__init__(**data)
 
 
 class MemorySearchResult(BaseModel):
