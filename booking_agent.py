@@ -7,6 +7,7 @@ Integrates with Mem0 for persistent user memory across sessions.
 
 import asyncio
 import logging
+import re
 from datetime import datetime
 from typing import Annotated, Optional, List
 import pytz
@@ -23,6 +24,87 @@ logger = logging.getLogger(__name__)
 
 # CET:Zagreb timezone
 ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
+
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+def parse_time_string(time_str: str) -> str:
+    """
+    Parse various time formats and return standardized HH:MM format (24-hour).
+    
+    Supports:
+    - 24-hour format: "19:00", "19:30", "9:00"
+    - 12-hour format: "7pm", "7:30pm", "7 pm", "7:30 pm", "7PM", "7:30 PM"
+    - 12-hour with am/pm: "7:00am", "11:30 AM", "12pm", "12:00am"
+    
+    Returns:
+        str: Time in HH:MM format (24-hour)
+    
+    Raises:
+        ValueError: If the time format cannot be parsed
+    """
+    if not time_str:
+        raise ValueError("Time string is empty")
+    
+    # Clean up the input
+    time_str = time_str.strip().lower()
+    
+    # Pattern for 12-hour format: 7pm, 7:30pm, 7 pm, 7:30 pm, etc.
+    pattern_12h = r'^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$'
+    match = re.match(pattern_12h, time_str)
+    
+    if match:
+        hour = int(match.group(1))
+        minute = int(match.group(2)) if match.group(2) else 0
+        period = match.group(3)
+        
+        # Validate hour and minute
+        if hour < 1 or hour > 12:
+            raise ValueError(f"Invalid hour in 12-hour format: {hour}")
+        if minute < 0 or minute > 59:
+            raise ValueError(f"Invalid minute: {minute}")
+        
+        # Convert to 24-hour format
+        if period == 'am':
+            if hour == 12:
+                hour = 0  # 12am is midnight (00:00)
+        else:  # pm
+            if hour != 12:
+                hour += 12  # 1pm-11pm -> 13-23
+            # 12pm stays as 12
+        
+        return f"{hour:02d}:{minute:02d}"
+    
+    # Pattern for 24-hour format: 19:00, 9:00, 09:00
+    pattern_24h = r'^(\d{1,2}):(\d{2})$'
+    match = re.match(pattern_24h, time_str)
+    
+    if match:
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        
+        # Validate hour and minute
+        if hour < 0 or hour > 23:
+            raise ValueError(f"Invalid hour in 24-hour format: {hour}")
+        if minute < 0 or minute > 59:
+            raise ValueError(f"Invalid minute: {minute}")
+        
+        return f"{hour:02d}:{minute:02d}"
+    
+    # Pattern for hour-only 24-hour format: "19", "9"
+    pattern_hour_only = r'^(\d{1,2})$'
+    match = re.match(pattern_hour_only, time_str)
+    
+    if match:
+        hour = int(match.group(1))
+        if hour < 0 or hour > 23:
+            raise ValueError(f"Invalid hour: {hour}")
+        return f"{hour:02d}:00"
+    
+    raise ValueError(f"Unable to parse time format: '{time_str}'. Please use formats like '7pm', '7:30pm', '19:00', or '19:30'")
+
 
 # Initialize knowledge base
 kb = KnowledgeBaseManager.get_instance()
@@ -435,12 +517,13 @@ def create_reservation(
     phone_number: Annotated[str, "Contact phone number for the reservation"],
     number_of_guests: Annotated[int, "Number of guests for the reservation"],
     date: Annotated[str, "Date of the reservation in YYYY-MM-DD format"],
-    time: Annotated[str, "Time of the reservation in HH:MM format (24-hour)"],
+    time: Annotated[str, "Time of the reservation - supports both 12-hour (7pm, 7:30pm) and 24-hour (19:00) formats"],
     time_slot: Annotated[float, "Duration of the reservation in hours (default 2.0)"] = 2.0
 ) -> ReservationResult:
     """
     Create a new table reservation at the restaurant.
     Use this tool after collecting all required information from the guest.
+    Time can be provided in either 12-hour format (7pm, 7:30pm) or 24-hour format (19:00).
     """
     try:
         # Validate inputs
@@ -458,8 +541,17 @@ def create_reservation(
                 message=f"Maximum {settings.max_guests} guests per reservation. {settings.large_party_note}"
             )
         
+        # Parse time - supports both 12-hour (7pm) and 24-hour (19:00) formats
+        try:
+            parsed_time = parse_time_string(time)
+        except ValueError as e:
+            return ReservationResult(
+                success=False,
+                message=str(e)
+            )
+        
         # Parse date and time
-        reservation_datetime = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        reservation_datetime = datetime.strptime(f"{date} {parsed_time}", "%Y-%m-%d %H:%M")
         reservation_datetime = ZAGREB_TZ.localize(reservation_datetime)
         
         # Check if reservation is in the past
@@ -697,12 +789,13 @@ def cancel_reservation(
 def update_reservation(
     reservation_id: Annotated[int, "The reservation ID to update"],
     new_date: Annotated[Optional[str], "New date in YYYY-MM-DD format (optional)"] = None,
-    new_time: Annotated[Optional[str], "New time in HH:MM format (optional)"] = None,
+    new_time: Annotated[Optional[str], "New time - supports both 12-hour (7pm, 7:30pm) and 24-hour (19:00) formats (optional)"] = None,
     new_guests: Annotated[Optional[int], "New number of guests (optional)"] = None
 ) -> ReservationResult:
     """
     Update an existing reservation with new date, time, or number of guests.
     Use this tool when a guest wants to modify their reservation.
+    Time can be provided in either 12-hour format (7pm, 7:30pm) or 24-hour format (19:00).
     """
     try:
         db = DatabaseManager.get_instance()
@@ -738,7 +831,18 @@ def update_reservation(
             current_time = reservation.date_time.strftime('%H:%M')
             
             date_str = new_date or current_date
-            time_str = new_time or current_time
+            
+            # Parse time - supports both 12-hour (7pm) and 24-hour (19:00) formats
+            if new_time:
+                try:
+                    time_str = parse_time_string(new_time)
+                except ValueError as e:
+                    return ReservationResult(
+                        success=False,
+                        message=str(e)
+                    )
+            else:
+                time_str = current_time
             
             new_datetime = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
             new_datetime = ZAGREB_TZ.localize(new_datetime)
