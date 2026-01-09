@@ -3,13 +3,17 @@ Database models for restaurant table reservations.
 Uses SQLAlchemy ORM with support for SQLite (local) and PostgreSQL (Heroku).
 """
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import os
+import threading
 
 Base = declarative_base()
+
+# Lock for thread-safe database initialization
+_db_init_lock = threading.Lock()
 
 
 class Reservation(Base):
@@ -72,13 +76,15 @@ class DatabaseManager:
     _instance = None
     _engine = None
     _Session = None
+    _initialized = False
 
     @classmethod
     def get_instance(cls, database_url: str = None):
         """Get or create singleton database manager instance."""
-        if cls._instance is None:
-            cls._instance = cls(database_url)
-        return cls._instance
+        with _db_init_lock:
+            if cls._instance is None:
+                cls._instance = cls(database_url)
+            return cls._instance
 
     def __init__(self, database_url: str = None):
         """Initialize database connection."""
@@ -105,10 +111,35 @@ class DatabaseManager:
         
         self._Session = sessionmaker(bind=self._engine)
         
-        # Create tables if they don't exist
-        Base.metadata.create_all(self._engine)
+        # Create tables if they don't exist (with error handling for race conditions)
+        self._create_tables_safe()
         
-        print(f"Database initialized: {'PostgreSQL' if 'postgresql' in database_url else 'SQLite'}")
+        db_type = 'PostgreSQL' if 'postgresql' in database_url else 'SQLite'
+        print(f"Database initialized: {db_type}")
+
+    def _create_tables_safe(self):
+        """
+        Safely create tables, handling race conditions when multiple workers start.
+        """
+        try:
+            # Check if tables already exist
+            inspector = inspect(self._engine)
+            existing_tables = inspector.get_table_names()
+            
+            if 'reservations' not in existing_tables:
+                # Tables don't exist, create them
+                Base.metadata.create_all(self._engine)
+                print("Database tables created successfully")
+            else:
+                print("Database tables already exist")
+        except Exception as e:
+            # If there's a race condition error, tables were likely created by another worker
+            error_str = str(e).lower()
+            if 'already exists' in error_str or 'duplicate' in error_str:
+                print("Database tables already exist (created by another worker)")
+            else:
+                # Re-raise unexpected errors
+                raise e
 
     def get_session(self):
         """Get a new database session."""
