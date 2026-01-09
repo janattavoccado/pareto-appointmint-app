@@ -8,7 +8,7 @@ Integrates with Mem0 for persistent user memory across sessions.
 import asyncio
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Optional, List
 import pytz
 
@@ -29,6 +29,121 @@ ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
 # ============================================================================
 # Utility Functions
 # ============================================================================
+
+def parse_date_string(date_str: str) -> str:
+    """
+    Parse various date formats and return standardized YYYY-MM-DD format.
+    
+    Supports:
+    - ISO format: "2026-01-10", "2026/01/10"
+    - Natural language: "today", "tomorrow", "day after tomorrow"
+    - Day names: "monday", "tuesday", "next friday", etc.
+    - Relative: "in 2 days", "in a week"
+    
+    Returns:
+        str: Date in YYYY-MM-DD format
+    
+    Raises:
+        ValueError: If the date format cannot be parsed
+    """
+    if not date_str:
+        raise ValueError("Date string is empty")
+    
+    # Clean up the input
+    date_str = date_str.strip().lower()
+    
+    # Get current date in Zagreb timezone
+    now = datetime.now(ZAGREB_TZ)
+    today = now.date()
+    
+    # Natural language dates
+    if date_str in ['today', 'danas']:
+        return today.strftime('%Y-%m-%d')
+    
+    if date_str in ['tomorrow', 'sutra']:
+        return (today + timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    if date_str in ['day after tomorrow', 'prekosutra']:
+        return (today + timedelta(days=2)).strftime('%Y-%m-%d')
+    
+    # "in X days" pattern
+    in_days_pattern = r'^in\s+(\d+)\s+days?$'
+    match = re.match(in_days_pattern, date_str)
+    if match:
+        days = int(match.group(1))
+        return (today + timedelta(days=days)).strftime('%Y-%m-%d')
+    
+    # "in a week" / "in X weeks"
+    if date_str == 'in a week':
+        return (today + timedelta(weeks=1)).strftime('%Y-%m-%d')
+    
+    in_weeks_pattern = r'^in\s+(\d+)\s+weeks?$'
+    match = re.match(in_weeks_pattern, date_str)
+    if match:
+        weeks = int(match.group(1))
+        return (today + timedelta(weeks=weeks)).strftime('%Y-%m-%d')
+    
+    # Day names (find next occurrence)
+    day_names = {
+        'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+        'friday': 4, 'saturday': 5, 'sunday': 6,
+        # Croatian
+        'ponedjeljak': 0, 'utorak': 1, 'srijeda': 2, 'cetvrtak': 3,
+        'petak': 4, 'subota': 5, 'nedjelja': 6
+    }
+    
+    # Check for "next <day>" pattern
+    next_day_pattern = r'^next\s+(\w+)$'
+    match = re.match(next_day_pattern, date_str)
+    if match:
+        day_name = match.group(1).lower()
+        if day_name in day_names:
+            target_weekday = day_names[day_name]
+            current_weekday = today.weekday()
+            days_ahead = target_weekday - current_weekday
+            if days_ahead <= 0:  # Target day already happened this week
+                days_ahead += 7
+            return (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
+    
+    # Just day name (find next occurrence, including today if it matches)
+    if date_str in day_names:
+        target_weekday = day_names[date_str]
+        current_weekday = today.weekday()
+        days_ahead = target_weekday - current_weekday
+        if days_ahead < 0:  # Target day already happened this week
+            days_ahead += 7
+        return (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
+    
+    # Try to parse ISO format: YYYY-MM-DD
+    try:
+        parsed = datetime.strptime(date_str, '%Y-%m-%d')
+        return parsed.strftime('%Y-%m-%d')
+    except ValueError:
+        pass
+    
+    # Try to parse with slashes: YYYY/MM/DD
+    try:
+        parsed = datetime.strptime(date_str, '%Y/%m/%d')
+        return parsed.strftime('%Y-%m-%d')
+    except ValueError:
+        pass
+    
+    # Try to parse DD/MM/YYYY (European format)
+    try:
+        parsed = datetime.strptime(date_str, '%d/%m/%Y')
+        return parsed.strftime('%Y-%m-%d')
+    except ValueError:
+        pass
+    
+    # Try to parse DD.MM.YYYY (European format with dots)
+    try:
+        parsed = datetime.strptime(date_str, '%d.%m.%Y')
+        return parsed.strftime('%Y-%m-%d')
+    except ValueError:
+        pass
+    
+    raise ValueError(f"Unable to parse date format: '{date_str}'. Please use formats like 'tomorrow', 'next friday', or 'YYYY-MM-DD'")
+
 
 def parse_time_string(time_str: str) -> str:
     """
@@ -516,13 +631,14 @@ def create_reservation(
     user_name: Annotated[str, "Name of the guest making the reservation"],
     phone_number: Annotated[str, "Contact phone number for the reservation"],
     number_of_guests: Annotated[int, "Number of guests for the reservation"],
-    date: Annotated[str, "Date of the reservation in YYYY-MM-DD format"],
+    date: Annotated[str, "Date of the reservation - supports 'today', 'tomorrow', day names like 'friday', or YYYY-MM-DD format"],
     time: Annotated[str, "Time of the reservation - supports both 12-hour (7pm, 7:30pm) and 24-hour (19:00) formats"],
     time_slot: Annotated[float, "Duration of the reservation in hours (default 2.0)"] = 2.0
 ) -> ReservationResult:
     """
     Create a new table reservation at the restaurant.
     Use this tool after collecting all required information from the guest.
+    Date can be provided as 'today', 'tomorrow', a day name like 'friday', or in YYYY-MM-DD format.
     Time can be provided in either 12-hour format (7pm, 7:30pm) or 24-hour format (19:00).
     """
     try:
@@ -541,6 +657,15 @@ def create_reservation(
                 message=f"Maximum {settings.max_guests} guests per reservation. {settings.large_party_note}"
             )
         
+        # Parse date - supports natural language like 'today', 'tomorrow', 'friday', etc.
+        try:
+            parsed_date = parse_date_string(date)
+        except ValueError as e:
+            return ReservationResult(
+                success=False,
+                message=str(e)
+            )
+        
         # Parse time - supports both 12-hour (7pm) and 24-hour (19:00) formats
         try:
             parsed_time = parse_time_string(time)
@@ -551,7 +676,7 @@ def create_reservation(
             )
         
         # Parse date and time
-        reservation_datetime = datetime.strptime(f"{date} {parsed_time}", "%Y-%m-%d %H:%M")
+        reservation_datetime = datetime.strptime(f"{parsed_date} {parsed_time}", "%Y-%m-%d %H:%M")
         reservation_datetime = ZAGREB_TZ.localize(reservation_datetime)
         
         # Check if reservation is in the past
@@ -788,13 +913,14 @@ def cancel_reservation(
 @function_tool
 def update_reservation(
     reservation_id: Annotated[int, "The reservation ID to update"],
-    new_date: Annotated[Optional[str], "New date in YYYY-MM-DD format (optional)"] = None,
+    new_date: Annotated[Optional[str], "New date - supports 'today', 'tomorrow', day names like 'friday', or YYYY-MM-DD format (optional)"] = None,
     new_time: Annotated[Optional[str], "New time - supports both 12-hour (7pm, 7:30pm) and 24-hour (19:00) formats (optional)"] = None,
     new_guests: Annotated[Optional[int], "New number of guests (optional)"] = None
 ) -> ReservationResult:
     """
     Update an existing reservation with new date, time, or number of guests.
     Use this tool when a guest wants to modify their reservation.
+    Date can be provided as 'today', 'tomorrow', a day name like 'friday', or in YYYY-MM-DD format.
     Time can be provided in either 12-hour format (7pm, 7:30pm) or 24-hour format (19:00).
     """
     try:
@@ -830,7 +956,17 @@ def update_reservation(
             current_date = reservation.date_time.strftime('%Y-%m-%d')
             current_time = reservation.date_time.strftime('%H:%M')
             
-            date_str = new_date or current_date
+            # Parse date - supports natural language like 'today', 'tomorrow', 'friday', etc.
+            if new_date:
+                try:
+                    date_str = parse_date_string(new_date)
+                except ValueError as e:
+                    return ReservationResult(
+                        success=False,
+                        message=str(e)
+                    )
+            else:
+                date_str = current_date
             
             # Parse time - supports both 12-hour (7pm) and 24-hour (19:00) formats
             if new_time:
@@ -932,15 +1068,21 @@ def update_reservation(
 
 @function_tool
 def check_availability(
-    date: Annotated[str, "Date to check in YYYY-MM-DD format"]
+    date: Annotated[str, "Date to check - supports 'today', 'tomorrow', day names like 'friday', or YYYY-MM-DD format"]
 ) -> str:
     """
     Check reservation availability for a specific date.
     Use this tool to see what time slots are available or busy on a given date.
+    Date can be provided as 'today', 'tomorrow', a day name like 'friday', or in YYYY-MM-DD format.
     """
     try:
-        # Parse the date
-        check_date = datetime.strptime(date, "%Y-%m-%d").date()
+        # Parse the date - supports natural language like 'today', 'tomorrow', 'friday', etc.
+        try:
+            parsed_date = parse_date_string(date)
+        except ValueError as e:
+            return str(e)
+        
+        check_date = datetime.strptime(parsed_date, "%Y-%m-%d").date()
         
         # Get operating hours for that day
         day_name = check_date.strftime('%A').lower()
