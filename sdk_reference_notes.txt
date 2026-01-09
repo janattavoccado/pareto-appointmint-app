@@ -1,0 +1,78 @@
+# OpenAI Agents SDK - Key Implementation Patterns
+# Source: https://github.com/openai/openai-agents-python/tree/main/examples
+
+## Key Imports
+from agents import Agent, Runner, function_tool
+from pydantic import BaseModel, Field
+from typing import Annotated
+
+## Tool Definition Pattern
+@function_tool
+def get_weather(city: Annotated[str, "The city to get the weather for"]) -> Weather:
+    """Get the current weather information for a specified city."""
+    return Weather(city=city, temperature_range="14-20C", conditions="Sunny")
+
+## Agent Definition Pattern
+agent = Agent(
+    name="Hello world",
+    instructions="You are a helpful agent.",
+    tools=[get_weather],
+)
+
+## Running Agent
+async def main():
+    result = await Runner.run(agent, input="What's the weather in Tokyo?")
+    print(result.final_output)
+
+## Customer Service Pattern (with context)
+class AirlineAgentContext(BaseModel):
+    passenger_name: str | None = None
+    confirmation_number: str | None = None
+    seat_number: str | None = None
+    flight_number: str | None = None
+
+# Agent with context
+triage_agent = Agent[AirlineAgentContext](
+    name="Triage Agent",
+    handoff_description="A triage agent that can delegate a customer's request to the appropriate agent.",
+    instructions=(
+        f"{RECOMMENDED_PROMPT_PREFIX} "
+        "You are a helpful triaging agent. You can use your tools to delegate questions to other appropriate agent"
+    ),
+    handoffs=[faq_agent, handoff(agent=seat_booking_agent, on_handoff=on_seat_booking_handoff)],
+)
+
+## Running with conversation loop
+async def main():
+    current_agent: Agent[AirlineAgentContext] = triage_agent
+    input_items: list[TResponseInputItem] = []
+    context = AirlineAgentContext()
+    conversation_id = uuid.uuid4().hex[:16]
+
+    while True:
+        user_input = input("Enter your message: ")
+        with trace("Customer service", group_id=conversation_id):
+            input_items.append({"content": user_input, "role": "user"})
+            result = await Runner.run(current_agent, input_items, context=context)
+
+        for new_item in result.new_items:
+            agent_name = new_item.agent.name
+            if isinstance(new_item, MessageOutputItem):
+                print(f"{agent_name}: {ItemHelpers.text_message_output(new_item)}")
+            elif isinstance(new_item, HandoffOutputItem):
+                print(f"Handed off from {new_item.source_agent.name} to {new_item.target_agent.name}")
+            elif isinstance(new_item, ToolCallItem):
+                print(f"{agent_name}: Calling a tool")
+            elif isinstance(new_item, ToolCallOutputItem):
+                print(f"{agent_name}: Tool call output: {new_item.output}")
+        
+        input_items = result.to_input_list()
+        current_agent = result.last_agent
+
+## Key Patterns for Restaurant Booking:
+1. Use @function_tool decorator for tools
+2. Use Annotated[type, "description"] for tool parameters
+3. Use Pydantic BaseModel for structured outputs
+4. Use Agent() with name, instructions, and tools
+5. Use Runner.run() to execute agent
+6. For conversation loop, maintain input_items and use result.to_input_list()

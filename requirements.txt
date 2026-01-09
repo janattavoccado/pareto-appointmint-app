@@ -1,0 +1,21 @@
+# Flask and Web
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# OpenAI Agents SDK
+openai-agents>=0.0.3
+
+# Database
+sqlalchemy>=2.0.0
+
+# Environment and Configuration
+python-dotenv>=1.0.0
+
+# Data Validation
+pydantic>=2.0.0
+
+# Timezone handling
+pytz>=2024.1
+
+# Development
+watchdog>=4.0.0

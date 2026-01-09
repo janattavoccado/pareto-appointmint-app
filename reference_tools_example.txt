@@ -1,0 +1,64 @@
+# OpenAI Agents SDK - tools.py example
+# Source: https://github.com/openai/openai-agents-python/blob/main/examples/basic/tools.py
+
+import asyncio
+from typing import Annotated
+
+from pydantic import BaseModel, Field
+
+from agents import Agent, Runner, function_tool
+
+
+class Weather(BaseModel):
+    city: str = Field(description="The city name")
+    temperature_range: str = Field(description="The temperature range in Celsius")
+    conditions: str = Field(description="The weather conditions")
+
+
+@function_tool
+def get_weather(city: Annotated[str, "The city to get the weather for"]) -> Weather:
+    """Get the current weather information for a specified city."""
+    print("[debug] get_weather called")
+    return Weather(city=city, temperature_range="14-20C", conditions="Sunny with wind.")
+
+
+agent = Agent(
+    name="Hello world",
+    instructions="You are a helpful agent.",
+    tools=[get_weather],
+)
+
+
+async def main():
+    result = await Runner.run(agent, input="What's the weather in Tokyo?")
+    print(result.final_output)
+    # The weather in Tokyo is sunny.
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+
+# OpenAI Agents SDK - hello_world.py example
+# Source: https://github.com/openai/openai-agents-python/blob/main/examples/basic/hello_world.py
+
+import asyncio
+
+from agents import Agent, Runner
+
+
+async def main():
+    agent = Agent(
+        name="Assistant",
+        instructions="You only respond in haikus.",
+    )
+
+    result = await Runner.run(agent, "Tell me about recursion in programming.")
+    print(result.final_output)
+    # Function calls itself,
+    # Looping in smaller pieces,
+    # Endless by design.
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
