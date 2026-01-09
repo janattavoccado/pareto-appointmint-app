@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ menu.page_title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #c0392b;
+            --accent-color: #d4af37;
+            --text-light: #f8f9fa;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            color: #333;
+            background: #faf9f7;
+        }
+
+        /* Navigation */
+        .navbar {
+            background: var(--primary-color) !important;
+            padding: 1rem 0;
+        }
+
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent-color) !important;
+        }
+
+        .nav-link {
+            color: var(--text-light) !important;
+            margin: 0 10px;
+            transition: color 0.3s;
+        }
+
+        .nav-link:hover {
+            color: var(--accent-color) !important;
+        }
+
+        /* Hero Section */
+        .menu-hero {
+            background: linear-gradient(rgba(44, 62, 80, 0.9), rgba(44, 62, 80, 0.9)),
+                        url('https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1920') center/cover;
+            color: white;
+            padding: 100px 0;
+            text-align: center;
+        }
+
+        .menu-hero h1 {
+            font-size: 3rem;
+            font-weight: 300;
+            letter-spacing: 5px;
+            margin-bottom: 15px;
+        }
+
+        .menu-hero p {
+            font-style: italic;
+            opacity: 0.9;
+        }
+
+        /* Menu Container */
+        .menu-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+
+        /* Category */
+        .menu-category {
+            margin-bottom: 60px;
+        }
+
+        .category-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .category-header h2 {
+            color: var(--primary-color);
+            font-size: 2rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .category-header p {
+            color: #888;
+            font-style: italic;
+        }
+
+        .category-divider {
+            width: 80px;
+            height: 2px;
+            background: var(--accent-color);
+            margin: 20px auto;
+        }
+
+        /* Menu Item */
+        .menu-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 20px 0;
+            border-bottom: 1px dotted #ddd;
+        }
+
+        .menu-item:last-child {
+            border-bottom: none;
+        }
+
+        .item-details {
+            flex: 1;
+            padding-right: 20px;
+        }
+
+        .item-name {
+            font-size: 1.2rem;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .item-name .tag {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 8px;
+            font-weight: normal;
+        }
+
+        .tag-v {
+            background: #27ae60;
+            color: white;
+        }
+
+        .tag-vg {
+            background: #16a085;
+            color: white;
+        }
+
+        .tag-gf {
+            background: #f39c12;
+            color: white;
+        }
+
+        .item-description {
+            color: #666;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .item-price {
+            font-size: 1.2rem;
+            color: var(--secondary-color);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        /* Special Menus */
+        .special-menu {
+            background: white;
+            border: 2px solid var(--accent-color);
+            border-radius: 10px;
+            padding: 40px;
+            margin: 40px 0;
+            text-align: center;
+        }
+
+        .special-menu h3 {
+            color: var(--accent-color);
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+        }
+
+        .special-menu .price {
+            font-size: 2rem;
+            color: var(--secondary-color);
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .special-menu .note {
+            font-style: italic;
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        /* Legend */
+        .menu-legend {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .menu-legend span {
+            margin: 0 15px;
+            font-size: 0.9rem;
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--primary-color);
+            color: #aaa;
+            padding: 40px 0;
+        }
+
+        .footer a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+
+        .btn-reserve {
+            background: var(--secondary-color);
+            color: white;
+            padding: 12px 30px;
+            border-radius: 30px;
+            text-decoration: none;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+
+        .btn-reserve:hover {
+            background: #a93226;
+            color: white;
+            transform: scale(1.05);
+        }
+
+        /* Wine Note */
+        .wine-note {
+            text-align: center;
+            padding: 30px;
+            background: #f0ebe3;
+            border-radius: 10px;
+            margin: 40px 0;
+        }
+
+        .wine-note i {
+            font-size: 2rem;
+            color: var(--secondary-color);
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">{{ config.restaurant.name }}</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="/">Reservations</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/about">About Us</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/menu">Menu</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/contact">Contact</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="menu-hero">
+        <div class="container">
+            <h1>OUR MENU</h1>
+            <p>Crafted with passion, served with pride</p>
+        </div>
+    </section>
+
+    <!-- Menu Content -->
+    <div class="menu-container">
+        <!-- Legend -->
+        <div class="menu-legend">
+            <span><span class="tag tag-v">V</span> Vegetarian</span>
+            <span><span class="tag tag-vg">VG</span> Vegan</span>
+            <span><span class="tag tag-gf">GF</span> Gluten Free</span>
+        </div>
+
+        <!-- Lunch Special -->
+        {% if menu.lunch_menu and menu.lunch_menu.available %}
+        <div class="special-menu">
+            <h3><i class="bi bi-sun"></i> Lunch Special</h3>
+            <p>{{ menu.lunch_menu.description }}</p>
+            <p><strong>{{ menu.lunch_menu.days | join(', ') | title }}</strong> | {{ menu.lunch_menu.hours }}</p>
+            <div class="price">{{ menu.currency }} {{ "%.2f"|format(menu.lunch_menu.price) }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Menu Categories -->
+        {% for category in menu.categories %}
+        <div class="menu-category">
+            <div class="category-header">
+                <h2>{{ category.name }}</h2>
+                <div class="category-divider"></div>
+                <p>{{ category.description }}</p>
+            </div>
+
+            {% for item in category.items %}
+            <div class="menu-item">
+                <div class="item-details">
+                    <div class="item-name">
+                        {{ item.name }}
+                        {% if 'vegetarian' in item.tags %}<span class="tag tag-v">V</span>{% endif %}
+                        {% if 'vegan' in item.tags %}<span class="tag tag-vg">VG</span>{% endif %}
+                        {% if 'gluten_free' in item.tags %}<span class="tag tag-gf">GF</span>{% endif %}
+                    </div>
+                    <div class="item-description">{{ item.description }}</div>
+                </div>
+                <div class="item-price">{{ menu.currency }} {{ "%.2f"|format(item.price) }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+        <!-- Tasting Menu -->
+        {% if menu.tasting_menu and menu.tasting_menu.available %}
+        <div class="special-menu">
+            <h3><i class="bi bi-stars"></i> {{ menu.tasting_menu.name }}</h3>
+            <p>{{ menu.tasting_menu.description }}</p>
+            <div class="price">{{ menu.currency }} {{ "%.2f"|format(menu.tasting_menu.price) }}</div>
+            <p>Wine pairing: +{{ menu.currency }} {{ "%.2f"|format(menu.tasting_menu.wine_pairing_price) }}</p>
+            <p class="note">{{ menu.tasting_menu.note }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Wine Note -->
+        <div class="wine-note">
+            <i class="bi bi-cup-straw"></i>
+            <p>{{ menu.wine_note }}</p>
+        </div>
+
+        <!-- Notes -->
+        <div class="text-center text-muted" style="font-size: 0.85rem;">
+            <p>{{ menu.notes.general }}</p>
+            <p>{{ menu.notes.allergies }}</p>
+            <p><em>Menu last updated: {{ menu.last_updated }}</em></p>
+        </div>
+
+        <!-- CTA -->
+        <div class="text-center mt-5">
+            <a href="/" class="btn-reserve">Book Your Table</a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-4">
+                    <h5 style="color: var(--accent-color);">{{ config.restaurant.name }}</h5>
+                    <p>{{ config.address.full_address }}</p>
+                </div>
+                <div class="col-md-4">
+                    <h5 style="color: var(--accent-color);">Contact</h5>
+                    <p>Phone: {{ config.contact.phone }}<br>
+                    Email: <a href="mailto:{{ config.contact.email }}">{{ config.contact.email }}</a></p>
+                </div>
+                <div class="col-md-4">
+                    <h5 style="color: var(--accent-color);">Hours</h5>
+                    <p>Mon-Thu: 11:00 - 23:00<br>
+                    Fri-Sat: 10:00 - 00:00<br>
+                    Sunday: 10:00 - 22:00</p>
+                </div>
+            </div>
+            <hr style="border-color: #444;">
+            <p class="text-center mb-0">&copy; 2025 {{ config.restaurant.name }}. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

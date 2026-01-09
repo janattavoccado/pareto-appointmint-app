@@ -1,0 +1,57 @@
+{
+    "page_title": "About Us - Pareto Restaurant",
+    "hero": {
+        "headline": "Our Story",
+        "subheadline": "A Passion for Perfection Since 2020"
+    },
+    "story": {
+        "title": "The Pareto Philosophy",
+        "paragraphs": [
+            "At Pareto Restaurant, we believe that 80% of your dining satisfaction comes from 20% of carefully selected ingredients and techniques. This principle guides everything we do, from sourcing the finest local produce to crafting each dish with precision and care.",
+            "Founded in 2020 by Chef Marko Horvat, Pareto Restaurant was born from a simple idea: create a dining experience where every element is optimized for maximum enjoyment. Our name reflects our commitment to finding that perfect balance where quality meets efficiency.",
+            "Located in the vibrant heart of Zagreb on Ilica street, our restaurant combines the warmth of Croatian hospitality with contemporary European cuisine. We take pride in supporting local farmers and producers, ensuring that every ingredient tells a story of our beautiful region."
+        ]
+    },
+    "chef": {
+        "name": "Chef Marko Horvat",
+        "title": "Executive Chef & Founder",
+        "bio": "With over 15 years of experience in Michelin-starred kitchens across Europe, Chef Marko returned to his hometown of Zagreb to share his culinary vision. His innovative approach blends traditional Croatian flavors with modern techniques, creating dishes that are both familiar and surprising.",
+        "philosophy": "I believe in letting ingredients speak for themselves. Our role is simply to bring out their best qualities."
+    },
+    "values": [
+        {
+            "title": "Quality First",
+            "description": "We source only the finest ingredients from trusted local suppliers and international artisans."
+        },
+        {
+            "title": "Sustainable Practices",
+            "description": "From farm to table, we prioritize environmentally responsible choices in everything we do."
+        },
+        {
+            "title": "Warm Hospitality",
+            "description": "Every guest is treated like family, with attentive service that anticipates your needs."
+        },
+        {
+            "title": "Culinary Innovation",
+            "description": "We constantly evolve our menu while respecting the traditions that inspire us."
+        }
+    ],
+    "awards": [
+        {
+            "year": 2023,
+            "title": "Best New Restaurant",
+            "organization": "Zagreb Gastro Awards"
+        },
+        {
+            "year": 2024,
+            "title": "Excellence in Service",
+            "organization": "Croatian Hospitality Association"
+        }
+    ],
+    "team_size": 25,
+    "seating_capacity": {
+        "indoor": 60,
+        "outdoor_terrace": 30,
+        "private_dining": 12
+    }
+}

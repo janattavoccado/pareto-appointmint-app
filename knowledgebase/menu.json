@@ -1,0 +1,186 @@
+{
+    "page_title": "Menu - Pareto Restaurant",
+    "last_updated": "2025-01-01",
+    "currency": "EUR",
+    "notes": {
+        "general": "All prices include VAT. Service charge is not included.",
+        "allergies": "Please inform your server of any allergies or dietary requirements.",
+        "vegetarian_symbol": "(V)",
+        "vegan_symbol": "(VG)",
+        "gluten_free_symbol": "(GF)"
+    },
+    "categories": [
+        {
+            "name": "Starters",
+            "description": "Begin your culinary journey",
+            "items": [
+                {
+                    "name": "Istrian Truffle Bruschetta",
+                    "description": "Grilled sourdough, black truffle paste, aged Pag cheese, micro greens",
+                    "price": 14.00,
+                    "tags": ["vegetarian"]
+                },
+                {
+                    "name": "Adriatic Octopus Carpaccio",
+                    "description": "Thinly sliced octopus, capers, lemon vinaigrette, olive oil from Korčula",
+                    "price": 18.00,
+                    "tags": ["gluten_free"]
+                },
+                {
+                    "name": "Seasonal Soup",
+                    "description": "Ask your server for today's selection",
+                    "price": 9.00,
+                    "tags": ["vegetarian", "vegan_option"]
+                },
+                {
+                    "name": "Beef Tartare",
+                    "description": "Hand-cut Croatian beef, quail egg, cornichons, house-made chips",
+                    "price": 16.00,
+                    "tags": []
+                }
+            ]
+        },
+        {
+            "name": "Main Courses",
+            "description": "The heart of your dining experience",
+            "items": [
+                {
+                    "name": "Grilled Sea Bass",
+                    "description": "Whole Adriatic sea bass, roasted vegetables, herb butter, new potatoes",
+                    "price": 32.00,
+                    "tags": ["gluten_free"]
+                },
+                {
+                    "name": "Lamb Rack",
+                    "description": "Pag Island lamb, rosemary jus, seasonal vegetables, potato gratin",
+                    "price": 38.00,
+                    "tags": ["gluten_free"]
+                },
+                {
+                    "name": "Risotto ai Funghi",
+                    "description": "Arborio rice, wild mushrooms, truffle oil, Parmesan foam",
+                    "price": 24.00,
+                    "tags": ["vegetarian", "gluten_free"]
+                },
+                {
+                    "name": "Duck Breast",
+                    "description": "Pan-seared duck, cherry reduction, celeriac purée, roasted beets",
+                    "price": 34.00,
+                    "tags": ["gluten_free"]
+                },
+                {
+                    "name": "Grilled Ribeye Steak",
+                    "description": "300g Croatian beef, bone marrow butter, truffle fries, béarnaise",
+                    "price": 42.00,
+                    "tags": []
+                },
+                {
+                    "name": "Mediterranean Vegetable Tower",
+                    "description": "Grilled zucchini, eggplant, peppers, goat cheese, basil pesto",
+                    "price": 22.00,
+                    "tags": ["vegetarian", "gluten_free"]
+                }
+            ]
+        },
+        {
+            "name": "Pasta & Risotto",
+            "description": "Handmade with love",
+            "items": [
+                {
+                    "name": "Pljukanci with Truffles",
+                    "description": "Traditional Istrian pasta, black truffle, butter, Parmesan",
+                    "price": 28.00,
+                    "tags": ["vegetarian"]
+                },
+                {
+                    "name": "Seafood Linguine",
+                    "description": "Fresh clams, mussels, prawns, cherry tomatoes, white wine sauce",
+                    "price": 26.00,
+                    "tags": []
+                },
+                {
+                    "name": "Black Risotto",
+                    "description": "Cuttlefish ink risotto, grilled calamari, aioli",
+                    "price": 24.00,
+                    "tags": ["gluten_free"]
+                }
+            ]
+        },
+        {
+            "name": "Desserts",
+            "description": "Sweet endings",
+            "items": [
+                {
+                    "name": "Chocolate Fondant",
+                    "description": "Warm chocolate cake, vanilla ice cream, raspberry coulis",
+                    "price": 12.00,
+                    "tags": ["vegetarian"]
+                },
+                {
+                    "name": "Kremšnita",
+                    "description": "Our take on the classic Croatian custard slice",
+                    "price": 10.00,
+                    "tags": ["vegetarian"]
+                },
+                {
+                    "name": "Panna Cotta",
+                    "description": "Vanilla bean panna cotta, seasonal fruit compote",
+                    "price": 10.00,
+                    "tags": ["vegetarian", "gluten_free"]
+                },
+                {
+                    "name": "Cheese Selection",
+                    "description": "Croatian artisan cheeses, honey, walnuts, fig jam",
+                    "price": 16.00,
+                    "tags": ["vegetarian", "gluten_free"]
+                }
+            ]
+        },
+        {
+            "name": "Beverages",
+            "description": "Curated drinks selection",
+            "items": [
+                {
+                    "name": "Espresso",
+                    "description": "Single shot of our house blend",
+                    "price": 3.00,
+                    "tags": ["vegan"]
+                },
+                {
+                    "name": "Fresh Juices",
+                    "description": "Orange, apple, or seasonal fruit",
+                    "price": 5.00,
+                    "tags": ["vegan"]
+                },
+                {
+                    "name": "Mineral Water (750ml)",
+                    "description": "Still or sparkling",
+                    "price": 4.00,
+                    "tags": ["vegan"]
+                },
+                {
+                    "name": "Soft Drinks",
+                    "description": "Selection of premium soft drinks",
+                    "price": 4.00,
+                    "tags": ["vegan"]
+                }
+            ]
+        }
+    ],
+    "wine_note": "Please ask for our extensive wine list featuring the finest Croatian and international wines.",
+    "tasting_menu": {
+        "available": true,
+        "name": "Chef's Tasting Menu",
+        "description": "A 7-course journey through our kitchen's finest creations",
+        "price": 85.00,
+        "wine_pairing_price": 45.00,
+        "note": "Available for the entire table only. Please inform us of any dietary requirements when booking."
+    },
+    "lunch_menu": {
+        "available": true,
+        "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+        "hours": "11:00 - 15:00",
+        "description": "Two-course lunch special",
+        "price": 18.00
+    }
+}

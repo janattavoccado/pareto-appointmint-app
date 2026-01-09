@@ -1,0 +1,76 @@
+{
+    "restaurant": {
+        "name": "Pareto Restaurant",
+        "tagline": "Where Every Bite is a Pareto Optimal Experience",
+        "description": "A modern European restaurant offering exceptional dining experiences in the heart of Zagreb.",
+        "established": 2020
+    },
+    "contact": {
+        "phone": "+385 1 234 5678",
+        "email": "reservations@pareto-restaurant.hr",
+        "website": "https://pareto-restaurant.hr"
+    },
+    "address": {
+        "street": "Ilica 123",
+        "city": "Zagreb",
+        "postal_code": "10000",
+        "country": "Croatia",
+        "full_address": "Ilica 123, 10000 Zagreb, Croatia",
+        "google_maps_url": "https://maps.google.com/?q=Ilica+123+Zagreb+Croatia"
+    },
+    "operating_hours": {
+        "timezone": "Europe/Zagreb",
+        "monday": {
+            "open": "11:00",
+            "close": "23:00",
+            "is_closed": false
+        },
+        "tuesday": {
+            "open": "11:00",
+            "close": "23:00",
+            "is_closed": false
+        },
+        "wednesday": {
+            "open": "11:00",
+            "close": "23:00",
+            "is_closed": false
+        },
+        "thursday": {
+            "open": "11:00",
+            "close": "23:00",
+            "is_closed": false
+        },
+        "friday": {
+            "open": "11:00",
+            "close": "00:00",
+            "is_closed": false
+        },
+        "saturday": {
+            "open": "10:00",
+            "close": "00:00",
+            "is_closed": false
+        },
+        "sunday": {
+            "open": "10:00",
+            "close": "22:00",
+            "is_closed": false
+        },
+        "special_notes": "Kitchen closes 1 hour before closing time. Last reservation accepted 2 hours before closing."
+    },
+    "reservation_settings": {
+        "min_guests": 1,
+        "max_guests": 20,
+        "default_time_slot_hours": 2,
+        "advance_booking_hours": 1,
+        "max_advance_booking_days": 60,
+        "large_party_threshold": 8,
+        "large_party_note": "For parties of 8 or more, please call us directly to discuss menu options."
+    },
+    "urls": {
+        "home": "/",
+        "about": "/about",
+        "menu": "/menu",
+        "reservations": "/",
+        "contact": "/contact"
+    }
+}
