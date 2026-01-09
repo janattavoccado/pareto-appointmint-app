@@ -1,6 +1,6 @@
 """
 Database models for restaurant table reservations.
-Uses SQLAlchemy ORM with SQLite backend.
+Uses SQLAlchemy ORM with support for SQLite (local) and PostgreSQL (Heroku).
 """
 
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float
@@ -46,9 +46,28 @@ class Reservation(Base):
         }
 
 
+def get_database_url():
+    """
+    Get the database URL from environment variables.
+    Handles Heroku's DATABASE_URL format which uses 'postgres://' instead of 'postgresql://'.
+    """
+    database_url = os.getenv('DATABASE_URL')
+    
+    if database_url is None:
+        # Default to SQLite for local development
+        return 'sqlite:///restaurant_bookings.db'
+    
+    # Heroku uses 'postgres://' but SQLAlchemy 1.4+ requires 'postgresql://'
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    
+    return database_url
+
+
 class DatabaseManager:
     """
     Manager class for database operations.
+    Supports both SQLite (local development) and PostgreSQL (Heroku production).
     """
     _instance = None
     _engine = None
@@ -64,13 +83,32 @@ class DatabaseManager:
     def __init__(self, database_url: str = None):
         """Initialize database connection."""
         if database_url is None:
-            database_url = os.getenv('DATABASE_URL', 'sqlite:///restaurant_bookings.db')
+            database_url = get_database_url()
         
-        self._engine = create_engine(database_url, echo=False)
+        # Configure engine based on database type
+        if database_url.startswith('sqlite'):
+            # SQLite configuration
+            self._engine = create_engine(
+                database_url,
+                echo=False,
+                connect_args={'check_same_thread': False}
+            )
+        else:
+            # PostgreSQL configuration
+            self._engine = create_engine(
+                database_url,
+                echo=False,
+                pool_size=5,
+                max_overflow=10,
+                pool_pre_ping=True  # Verify connections before using
+            )
+        
         self._Session = sessionmaker(bind=self._engine)
         
         # Create tables if they don't exist
         Base.metadata.create_all(self._engine)
+        
+        print(f"Database initialized: {'PostgreSQL' if 'postgresql' in database_url else 'SQLite'}")
 
     def get_session(self):
         """Get a new database session."""
