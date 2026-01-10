@@ -993,7 +993,7 @@ TOOLS = [
     {
         "type": "function",
         "name": "create_reservation",
-        "description": "Create a new table reservation. Date supports 'today', 'tomorrow', day names, or YYYY-MM-DD. Time supports 12-hour (7pm) or 24-hour (19:00) formats.",
+        "description": "Create a new table reservation. Date supports 'today', 'tomorrow', day names, or YYYY-MM-DD. Time supports 12-hour (7pm) or 24-hour (19:00) formats. Time slot defaults to 2 hours.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -1005,7 +1005,7 @@ TOOLS = [
                 "time": {"type": "string", "description": "Time - '7pm', '7:30pm', '19:00', etc."},
                 "time_slot": {"type": "number", "description": "Duration in hours (default 2.0)"}
             },
-            "required": ["user_id", "user_name", "phone_number", "number_of_guests", "date", "time"],
+            "required": ["user_id", "user_name", "phone_number", "number_of_guests", "date", "time", "time_slot"],
             "additionalProperties": False
         },
         "strict": True
@@ -1056,17 +1056,17 @@ TOOLS = [
     {
         "type": "function",
         "name": "update_reservation",
-        "description": "Update an existing reservation (date, time, or number of guests).",
+        "description": "Update an existing reservation (date, time, or number of guests). Pass null for fields you don't want to change.",
         "parameters": {
             "type": "object",
             "properties": {
                 "reservation_id": {"type": "integer", "description": "The reservation ID"},
                 "user_id": {"type": "string", "description": "The user's identifier (for verification)"},
-                "new_date": {"type": "string", "description": "New date (optional)"},
-                "new_time": {"type": "string", "description": "New time (optional)"},
-                "new_guests": {"type": "integer", "description": "New number of guests (optional)"}
+                "new_date": {"type": ["string", "null"], "description": "New date or null to keep current"},
+                "new_time": {"type": ["string", "null"], "description": "New time or null to keep current"},
+                "new_guests": {"type": ["integer", "null"], "description": "New number of guests or null to keep current"}
             },
-            "required": ["reservation_id", "user_id"],
+            "required": ["reservation_id", "user_id", "new_date", "new_time", "new_guests"],
             "additionalProperties": False
         },
         "strict": True
