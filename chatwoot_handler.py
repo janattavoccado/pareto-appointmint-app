@@ -298,13 +298,13 @@ def webhook_handler(payload: Dict[str, Any]) -> Dict[str, Any]:
         
         # --- Process with Booking Agent ---
         try:
-            from booking_agent import process_booking_message
+            from booking_agent import process_chatwoot_message
             
             # Create user identifier from phone number or contact id
             user_id = phone_number or f"chatwoot_{contact.get('id', 'unknown')}"
             
-            # Process the message with the booking agent
-            agent_response = process_booking_message(
+            # Process the message with the booking agent (using Responses API)
+            agent_response = process_chatwoot_message(
                 message=message_to_process,
                 user_id=user_id,
                 user_name=user_name,

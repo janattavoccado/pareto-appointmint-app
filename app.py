@@ -5,7 +5,6 @@ Includes Chatwoot webhook integration for WhatsApp messaging.
 """
 
 import os
-import asyncio
 import uuid
 import logging
 from datetime import datetime
@@ -23,8 +22,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import the booking agent
-from booking_agent import run_booking_agent, booking_agent
+# Import the booking agent (using Responses API - synchronous)
+from booking_agent import process_booking_message, get_or_create_history, update_history
 from models import DatabaseManager
 from knowledgebase_manager import KnowledgeBaseManager
 
@@ -141,15 +140,12 @@ def chat():
         session_id = get_or_create_session_id()
         conversation_history = get_conversation_history()
         
-        # Run the booking agent
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            agent_response, updated_history = loop.run_until_complete(
-                run_booking_agent(user_message, conversation_history)
-            )
-        finally:
-            loop.close()
+        # Run the booking agent (synchronous - using Responses API)
+        agent_response, updated_history = process_booking_message(
+            message=user_message,
+            user_id=session_id,
+            conversation_history=conversation_history
+        )
         
         # Save updated conversation history
         save_conversation_history(updated_history)
