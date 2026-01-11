@@ -7,10 +7,12 @@ Includes Chatwoot webhook integration for WhatsApp messaging.
 import os
 import uuid
 import logging
+import tempfile
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
 from dotenv import load_dotenv
+from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
@@ -176,6 +178,89 @@ def reset_conversation():
         'message': 'Conversation reset successfully',
         'session_id': session['session_id']
     })
+
+
+@app.route('/chat/audio', methods=['POST'])
+def chat_audio():
+    """
+    Handle audio messages from the web interface.
+    Transcribes audio using OpenAI Whisper and processes with booking agent.
+    """
+    try:
+        # Check if audio file is in the request
+        if 'audio' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No audio file provided'
+            }), 400
+        
+        audio_file = request.files['audio']
+        
+        if audio_file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'No audio file selected'
+            }), 400
+        
+        # Get session info
+        session_id = get_or_create_session_id()
+        conversation_history = get_conversation_history()
+        
+        # Save audio to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_audio:
+            audio_file.save(temp_audio.name)
+            temp_audio_path = temp_audio.name
+        
+        try:
+            # Initialize OpenAI client
+            client = OpenAI()
+            
+            # Transcribe audio using Whisper
+            with open(temp_audio_path, 'rb') as audio:
+                transcription = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio,
+                    language="hr"  # Croatian - change as needed
+                )
+            
+            transcribed_text = transcription.text.strip()
+            
+            if not transcribed_text:
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not transcribe audio. Please try again or type your message.'
+                }), 400
+            
+            logger.info(f"Transcribed audio: {transcribed_text}")
+            
+            # Process with booking agent
+            agent_response, updated_history = process_booking_message(
+                message=transcribed_text,
+                user_id=session_id,
+                conversation_history=conversation_history
+            )
+            
+            # Save updated conversation history
+            save_conversation_history(updated_history)
+            
+            return jsonify({
+                'success': True,
+                'transcribed_text': transcribed_text,
+                'response': agent_response,
+                'session_id': session_id
+            })
+            
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+        
+    except Exception as e:
+        logger.error(f"Audio chat error: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 # ============================================================================

@@ -168,6 +168,88 @@
             transform: none;
         }
 
+        .btn-mic {
+            padding: 15px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 54px;
+            height: 54px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-mic:hover {
+            background: #219a52;
+            transform: scale(1.05);
+        }
+
+        .btn-mic.recording {
+            background: #e74c3c;
+            animation: pulse 1s infinite;
+        }
+
+        .btn-mic:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .recording-indicator {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            background: #fee2e2;
+            border-radius: 20px;
+            color: #dc2626;
+            font-size: 0.85rem;
+            margin-bottom: 10px;
+        }
+
+        .recording-indicator.active {
+            display: flex;
+        }
+
+        .recording-dot {
+            width: 10px;
+            height: 10px;
+            background: #dc2626;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .transcription-preview {
+            display: none;
+            padding: 10px 15px;
+            background: #f0f9ff;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: #0369a1;
+            border-left: 3px solid #0ea5e9;
+        }
+
+        .transcription-preview.active {
+            display: block;
+        }
+
         .btn-reset {
             padding: 10px 20px;
             background: transparent;
@@ -380,15 +462,35 @@
 
         <!-- Chat Input -->
         <div class="chat-input-container">
+            <!-- Recording Indicator -->
+            <div class="recording-indicator" id="recordingIndicator">
+                <span class="recording-dot"></span>
+                <span>Recording... <span id="recordingTime">0:00</span></span>
+                <span style="margin-left: auto; cursor: pointer;" onclick="cancelRecording()">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </span>
+            </div>
+            
+            <!-- Transcription Preview -->
+            <div class="transcription-preview" id="transcriptionPreview">
+                <i class="bi bi-mic-fill"></i> <span id="transcriptionText"></span>
+            </div>
+            
             <div class="chat-input-group">
                 <input type="text" 
                        class="chat-input" 
                        id="messageInput" 
-                       placeholder="Type your message here..."
+                       placeholder="Type your message or click the mic to speak..."
                        onkeypress="handleKeyPress(event)">
+                <button class="btn-mic" id="micButton" onclick="toggleRecording()" title="Hold to record voice message">
+                    <i class="bi bi-mic-fill" id="micIcon"></i>
+                </button>
                 <button class="btn-send" id="sendButton" onclick="sendMessage()">
                     <i class="bi bi-send-fill"></i> Send
                 </button>
+            </div>
+            <div style="text-align: center; margin-top: 8px; font-size: 0.75rem; color: #888;">
+                <i class="bi bi-info-circle"></i> Click the green mic button to record a voice message
             </div>
         </div>
     </div>
@@ -398,6 +500,19 @@
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
         const typingIndicator = document.getElementById('typingIndicator');
+        const micButton = document.getElementById('micButton');
+        const micIcon = document.getElementById('micIcon');
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const recordingTime = document.getElementById('recordingTime');
+        const transcriptionPreview = document.getElementById('transcriptionPreview');
+        const transcriptionText = document.getElementById('transcriptionText');
+
+        // Audio recording state
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let recordingTimer = null;
+        let recordingSeconds = 0;
 
         // Auto-scroll to bottom
         function scrollToBottom() {
@@ -543,9 +658,176 @@
             }
         }
 
+        // ============================================
+        // Audio Recording Functions
+        // ============================================
+
+        // Toggle recording on/off
+        async function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        // Start recording
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    // Stop all tracks
+                    stream.getTracks().forEach(track => track.stop());
+                    
+                    if (audioChunks.length > 0) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await sendAudioMessage(audioBlob);
+                    }
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Update UI
+                micButton.classList.add('recording');
+                micIcon.className = 'bi bi-stop-fill';
+                recordingIndicator.classList.add('active');
+                
+                // Start timer
+                recordingSeconds = 0;
+                recordingTimer = setInterval(() => {
+                    recordingSeconds++;
+                    const minutes = Math.floor(recordingSeconds / 60);
+                    const seconds = recordingSeconds % 60;
+                    recordingTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                alert('Could not access microphone. Please ensure you have granted microphone permissions.');
+            }
+        }
+
+        // Stop recording
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            
+            isRecording = false;
+            
+            // Update UI
+            micButton.classList.remove('recording');
+            micIcon.className = 'bi bi-mic-fill';
+            recordingIndicator.classList.remove('active');
+            
+            // Stop timer
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+            }
+        }
+
+        // Cancel recording without sending
+        function cancelRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                audioChunks = []; // Clear chunks so nothing is sent
+                mediaRecorder.stop();
+            }
+            
+            isRecording = false;
+            
+            // Update UI
+            micButton.classList.remove('recording');
+            micIcon.className = 'bi bi-mic-fill';
+            recordingIndicator.classList.remove('active');
+            
+            // Stop timer
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+            }
+        }
+
+        // Send audio message to server
+        async function sendAudioMessage(audioBlob) {
+            // Disable inputs while processing
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+            micButton.disabled = true;
+
+            // Show typing indicator
+            setTyping(true);
+
+            try {
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.webm');
+
+                const response = await fetch('/chat/audio', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                // Hide typing indicator
+                setTyping(false);
+
+                if (data.success) {
+                    // Show transcription preview
+                    transcriptionText.textContent = data.transcribed_text;
+                    transcriptionPreview.classList.add('active');
+                    
+                    // Add user message (transcribed text) to chat
+                    addMessage(`🎤 ${data.transcribed_text}`, true);
+                    
+                    // Add agent response
+                    addMessage(data.response, false);
+                    
+                    // Hide transcription preview after a delay
+                    setTimeout(() => {
+                        transcriptionPreview.classList.remove('active');
+                    }, 3000);
+                } else {
+                    addMessage('Sorry, I couldn\'t process your voice message. ' + (data.error || 'Please try again or type your message.'), false);
+                    console.error('Error:', data.error);
+                }
+            } catch (error) {
+                setTyping(false);
+                addMessage('Sorry, I couldn\'t send your voice message. Please check your connection and try again.', false);
+                console.error('Error:', error);
+            }
+
+            // Re-enable inputs
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+            micButton.disabled = false;
+            messageInput.focus();
+        }
+
         // Focus input on page load
         window.onload = function() {
             messageInput.focus();
+            
+            // Check for microphone support
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                micButton.disabled = true;
+                micButton.title = 'Voice recording is not supported in this browser';
+                console.warn('getUserMedia is not supported in this browser');
+            }
         };
     </script>
 </body>
