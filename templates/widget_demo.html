@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pareto Booking Widget - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .demo-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .demo-header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .demo-header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .demo-header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .demo-content {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section h2 {
+            color: #333;
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section h2::before {
+            content: '';
+            width: 4px;
+            height: 24px;
+            background: #4CAF50;
+            border-radius: 2px;
+        }
+
+        .section p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .code-block {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block pre {
+            color: #d4d4d4;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .code-block .comment {
+            color: #6a9955;
+        }
+
+        .code-block .tag {
+            color: #569cd6;
+        }
+
+        .code-block .attr {
+            color: #9cdcfe;
+        }
+
+        .code-block .string {
+            color: #ce9178;
+        }
+
+        .code-block .keyword {
+            color: #c586c0;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: #45a049;
+        }
+
+        .copy-btn.copied {
+            background: #2196F3;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .feature-card .icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .feature-card h3 {
+            color: #333;
+            font-size: 1rem;
+            margin-bottom: 5px;
+        }
+
+        .feature-card p {
+            color: #666;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        .config-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .config-table th,
+        .config-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .config-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .config-table td {
+            color: #666;
+        }
+
+        .config-table code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .try-it-section {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .try-it-section h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .try-it-section p {
+            color: #666;
+            margin-bottom: 0;
+        }
+
+        .arrow-indicator {
+            position: fixed;
+            bottom: 100px;
+            right: 100px;
+            color: white;
+            font-size: 1.2rem;
+            animation: bounce 2s infinite;
+            pointer-events: none;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0) rotate(-45deg); }
+            40% { transform: translateY(-10px) rotate(-45deg); }
+            60% { transform: translateY(-5px) rotate(-45deg); }
+        }
+
+        @media (max-width: 768px) {
+            .demo-header h1 {
+                font-size: 1.8rem;
+            }
+
+            .demo-content {
+                padding: 25px;
+            }
+
+            .arrow-indicator {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="demo-header">
+            <h1>🍽️ Pareto Booking Widget</h1>
+            <p>Embeddable AI-powered restaurant reservation assistant</p>
+        </div>
+
+        <div class="demo-content">
+            <div class="section">
+                <h2>Quick Start</h2>
+                <p>Add this code snippet to your restaurant website to enable AI-powered table reservations:</p>
+                
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><span class="comment">&lt;!-- Pareto Booking Widget --&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="string">"{{ request.url_root }}widget/embed.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+<span class="tag">&lt;script&gt;</span>
+  ParetoBooking.init({
+    <span class="attr">assistantId</span>: <span class="string">'rest_demo_123'</span>,      <span class="comment">// Your unique restaurant ID</span>
+    <span class="attr">position</span>: <span class="string">'bottom-right'</span>,          <span class="comment">// Widget position</span>
+    <span class="attr">primaryColor</span>: <span class="string">'#4CAF50'</span>,          <span class="comment">// Your brand color</span>
+    <span class="attr">headerTitle</span>: <span class="string">'Table Reservation'</span>,  <span class="comment">// Widget header</span>
+    <span class="attr">welcomeMessage</span>: <span class="string">'Hi! Book a table at our restaurant.'</span>
+  });
+<span class="tag">&lt;/script&gt;</span></pre>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Features</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="icon">💬</div>
+                        <h3>Text Chat</h3>
+                        <p>Natural language booking via text messages</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">🎤</div>
+                        <h3>Voice Input</h3>
+                        <p>Speak to book with Whisper transcription</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">🌍</div>
+                        <h3>Multi-Language</h3>
+                        <p>Croatian, English, German, Italian, Spanish</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">📱</div>
+                        <h3>Responsive</h3>
+                        <p>Works on desktop and mobile devices</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">🎨</div>
+                        <h3>Customizable</h3>
+                        <p>Match your restaurant's branding</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="icon">🧠</div>
+                        <h3>AI Memory</h3>
+                        <p>Remembers returning guests</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Configuration Options</h2>
+                <table class="config-table">
+                    <thead>
+                        <tr>
+                            <th>Option</th>
+                            <th>Type</th>
+                            <th>Default</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>assistantId</code></td>
+                            <td>string</td>
+                            <td><em>required</em></td>
+                            <td>Unique identifier for your restaurant</td>
+                        </tr>
+                        <tr>
+                            <td><code>position</code></td>
+                            <td>string</td>
+                            <td><code>'bottom-right'</code></td>
+                            <td><code>'bottom-right'</code> or <code>'bottom-left'</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>primaryColor</code></td>
+                            <td>string</td>
+                            <td><code>'#4CAF50'</code></td>
+                            <td>Main brand color (hex)</td>
+                        </tr>
+                        <tr>
+                            <td><code>textColor</code></td>
+                            <td>string</td>
+                            <td><code>'#ffffff'</code></td>
+                            <td>Text color on primary background</td>
+                        </tr>
+                        <tr>
+                            <td><code>headerTitle</code></td>
+                            <td>string</td>
+                            <td><code>'Table Reservation'</code></td>
+                            <td>Widget header title</td>
+                        </tr>
+                        <tr>
+                            <td><code>welcomeMessage</code></td>
+                            <td>string</td>
+                            <td><code>'Hi! How can I help...'</code></td>
+                            <td>Initial greeting message</td>
+                        </tr>
+                        <tr>
+                            <td><code>placeholderText</code></td>
+                            <td>string</td>
+                            <td><code>'Type your message...'</code></td>
+                            <td>Input field placeholder</td>
+                        </tr>
+                        <tr>
+                            <td><code>language</code></td>
+                            <td>string</td>
+                            <td><code>'en'</code></td>
+                            <td>Default UI language</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="section">
+                <div class="try-it-section">
+                    <h3>👉 Try It Now!</h3>
+                    <p>Click the chat button in the bottom-right corner to test the widget.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="arrow-indicator">
+        ↘️ Try the widget!
+    </div>
+
+    <!-- Load the actual widget -->
+    <script src="{{ url_for('static', filename='widget/embed.js') }}"></script>
+    <script>
+        ParetoBooking.init({
+            assistantId: 'rest_demo_123',
+            position: 'bottom-right',
+            primaryColor: '#4CAF50',
+            headerTitle: 'Table Reservation',
+            welcomeMessage: 'Hi! I\'m your AI booking assistant. I can help you:\n\n• Make a table reservation\n• Check availability\n• Modify or cancel bookings\n• Answer questions about our restaurant\n\nHow can I assist you today?'
+        });
+
+        function copyCode(btn) {
+            const codeBlock = btn.parentElement.querySelector('pre');
+            const code = codeBlock.textContent;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -439,6 +439,242 @@ def chatwoot_webhook_legacy():
 
 
 # ============================================================================
+# Widget API Endpoints (Embeddable Chat Widget)
+# ============================================================================
+
+# In-memory storage for widget sessions (use Redis in production for scaling)
+widget_sessions = {}
+
+@app.route('/widget/embed.js', methods=['GET'])
+def widget_embed_js():
+    """
+    Serve the embeddable widget JavaScript file.
+    Usage: <script src="https://your-app.herokuapp.com/widget/embed.js"></script>
+    """
+    try:
+        widget_path = os.path.join(app.static_folder, 'widget', 'embed.js')
+        with open(widget_path, 'r') as f:
+            js_content = f.read()
+        
+        response = app.make_response(js_content)
+        response.headers['Content-Type'] = 'application/javascript'
+        response.headers['Cache-Control'] = 'public, max-age=3600'  # Cache for 1 hour
+        return response
+    except Exception as e:
+        logger.error(f"Widget JS error: {e}")
+        return 'console.error("ParetoBooking: Failed to load widget");', 500
+
+
+@app.route('/widget/chat', methods=['POST'])
+def widget_chat():
+    """
+    Handle text messages from the embeddable widget.
+    
+    Request JSON:
+    {
+        "assistant_id": "rest_abc123xyz",
+        "session_id": "widget_rest_abc123xyz_...",
+        "message": "I want to book a table"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        assistant_id = data.get('assistant_id')
+        session_id = data.get('session_id')
+        message = data.get('message', '').strip()
+        
+        if not assistant_id:
+            return jsonify({'success': False, 'error': 'assistant_id is required'}), 400
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'message is required'}), 400
+        
+        # Generate session_id if not provided
+        if not session_id:
+            session_id = f"widget_{assistant_id}_{uuid.uuid4().hex[:12]}"
+        
+        # Get or create conversation history for this widget session
+        if session_id not in widget_sessions:
+            widget_sessions[session_id] = {
+                'assistant_id': assistant_id,
+                'history': [],
+                'created_at': datetime.now().isoformat()
+            }
+        
+        conversation_history = widget_sessions[session_id]['history']
+        
+        # Create user_id from assistant_id and session for tracking
+        user_id = f"{assistant_id}:{session_id}"
+        
+        # Process with booking agent
+        agent_response, updated_history = process_booking_message(
+            message=message,
+            user_id=user_id,
+            conversation_history=conversation_history
+        )
+        
+        # Update stored history
+        widget_sessions[session_id]['history'] = updated_history
+        
+        logger.info(f"Widget chat - Assistant: {assistant_id}, Session: {session_id[:20]}..., Message: {message[:50]}...")
+        
+        return jsonify({
+            'success': True,
+            'response': agent_response,
+            'session_id': session_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Widget chat error: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/widget/chat/audio', methods=['POST'])
+def widget_chat_audio():
+    """
+    Handle audio messages from the embeddable widget.
+    Transcribes audio using Whisper and processes with booking agent.
+    
+    Request (multipart/form-data):
+    - audio: audio file (webm)
+    - assistant_id: restaurant assistant ID
+    - session_id: widget session ID
+    """
+    try:
+        # Get form data
+        assistant_id = request.form.get('assistant_id')
+        session_id = request.form.get('session_id')
+        audio_file = request.files.get('audio')
+        
+        if not assistant_id:
+            return jsonify({'success': False, 'error': 'assistant_id is required'}), 400
+        
+        if not audio_file:
+            return jsonify({'success': False, 'error': 'No audio file provided'}), 400
+        
+        # Generate session_id if not provided
+        if not session_id:
+            session_id = f"widget_{assistant_id}_{uuid.uuid4().hex[:12]}"
+        
+        # Save audio to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_audio:
+            audio_file.save(temp_audio.name)
+            temp_audio_path = temp_audio.name
+        
+        try:
+            # Initialize OpenAI client
+            client = OpenAI()
+            
+            # Transcribe audio using Whisper (auto-detect language)
+            with open(temp_audio_path, 'rb') as audio:
+                transcription = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio
+                    # Auto-detect language (supports: hr, en, de, it, es, etc.)
+                )
+            
+            transcribed_text = transcription.text.strip()
+            
+            if not transcribed_text:
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not transcribe audio'
+                }), 400
+            
+            logger.info(f"Widget audio transcribed: {transcribed_text}")
+            
+            # Get or create conversation history
+            if session_id not in widget_sessions:
+                widget_sessions[session_id] = {
+                    'assistant_id': assistant_id,
+                    'history': [],
+                    'created_at': datetime.now().isoformat()
+                }
+            
+            conversation_history = widget_sessions[session_id]['history']
+            user_id = f"{assistant_id}:{session_id}"
+            
+            # Process with booking agent
+            agent_response, updated_history = process_booking_message(
+                message=transcribed_text,
+                user_id=user_id,
+                conversation_history=conversation_history
+            )
+            
+            # Update stored history
+            widget_sessions[session_id]['history'] = updated_history
+            
+            return jsonify({
+                'success': True,
+                'transcribed_text': transcribed_text,
+                'response': agent_response,
+                'session_id': session_id
+            })
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+        
+    except Exception as e:
+        logger.error(f"Widget audio error: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/widget/config/<assistant_id>', methods=['GET'])
+def widget_config(assistant_id):
+    """
+    Get widget configuration for a specific assistant.
+    This can be extended to load custom configurations per restaurant.
+    """
+    try:
+        # For now, return default config with restaurant info from knowledgebase
+        restaurant_name = kb.get_restaurant_name()
+        
+        config = {
+            'assistant_id': assistant_id,
+            'restaurant_name': restaurant_name,
+            'welcome_message': f"Hi! I'm the booking assistant for {restaurant_name}. How can I help you today?",
+            'primary_color': '#4CAF50',
+            'supported_languages': ['hr', 'en', 'de', 'it', 'es'],
+            'features': {
+                'voice_input': True,
+                'text_input': True
+            }
+        }
+        
+        return jsonify({
+            'success': True,
+            'config': config
+        })
+        
+    except Exception as e:
+        logger.error(f"Widget config error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/widget/demo', methods=['GET'])
+def widget_demo():
+    """
+    Demo page showing the embedded widget in action.
+    """
+    return render_template('widget_demo.html')
+
+
+# ============================================================================
 # Health Check
 # ============================================================================
 
@@ -504,9 +740,13 @@ if __name__ == '__main__':
 ║    - About Us:  http://{host}:{port}/about                   
 ║    - Menu:      http://{host}:{port}/menu                    
 ║    - Contact:   http://{host}:{port}/contact                 
+║    - Widget Demo: http://{host}:{port}/widget/demo           
 ║                                                              
 ║  API Endpoints:                                              
 ║    - Chatwoot Webhook: /api/chatwoot/webhook                 
+║    - Widget Chat:      /widget/chat                          
+║    - Widget Audio:     /widget/chat/audio                    
+║    - Widget JS:        /widget/embed.js                      
 ║    - Health Check:     /health                               
 ╚══════════════════════════════════════════════════════════════╝
     """)
