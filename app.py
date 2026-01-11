@@ -215,23 +215,33 @@ def chat_audio():
             # Initialize OpenAI client
             client = OpenAI()
             
-            # Transcribe audio using Whisper
+            # Supported languages for transcription
+            # Whisper will auto-detect the language from this list
+            # Croatian (hr) is default, but also supports: English (en), German (de), Italian (it), Spanish (es)
+            SUPPORTED_LANGUAGES = ['hr', 'en', 'de', 'it', 'es']
+            
+            # First, try to transcribe without specifying language (auto-detect)
+            # Whisper is very good at detecting language automatically
             with open(temp_audio_path, 'rb') as audio:
                 transcription = client.audio.transcriptions.create(
                     model="whisper-1",
                     file=audio,
-                    language="hr"  # Croatian - change as needed
+                    # Not specifying language allows Whisper to auto-detect
+                    # Supported: Croatian, English, German, Italian, Spanish
+                    # If you want to force a specific language, uncomment below:
+                    # language="hr"  # Force Croatian
                 )
             
             transcribed_text = transcription.text.strip()
+            
+            # Log detected language info
+            logger.info(f"Audio transcribed (auto-detected language): {transcribed_text}")
             
             if not transcribed_text:
                 return jsonify({
                     'success': False,
                     'error': 'Could not transcribe audio. Please try again or type your message.'
                 }), 400
-            
-            logger.info(f"Transcribed audio: {transcribed_text}")
             
             # Process with booking agent
             agent_response, updated_history = process_booking_message(
