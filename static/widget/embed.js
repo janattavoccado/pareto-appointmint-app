@@ -99,8 +99,11 @@
             const scripts = document.getElementsByTagName('script');
             for (let i = 0; i < scripts.length; i++) {
                 const src = scripts[i].src;
-                if (src && src.includes('widget/embed.js')) {
-                    return src.replace('/widget/embed.js', '');
+                if (src && src.includes('embed.js')) {
+                    // Handle both /widget/embed.js and /static/widget/embed.js paths
+                    let baseUrl = src.replace('/static/widget/embed.js', '')
+                                     .replace('/widget/embed.js', '');
+                    return baseUrl;
                 }
             }
             // Fallback
