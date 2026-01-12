@@ -4,16 +4,32 @@ Handles table reservations with CET:Zagreb timezone support.
 Integrates with knowledge base for restaurant information.
 Integrates with Mem0 for persistent user memory across sessions.
 
-FIXED: Conversation context now properly maintained across messages.
-The user_id is enforced at the tool execution level, not relying on the model.
+VERSION 3.0 - STRUCTURED RESERVATION FLOW
+==========================================
+This version implements a state machine for reservations where:
+1. The Python code tracks the reservation state (not the LLM)
+2. Each step collects specific information in order
+3. The LLM extracts structured data from user messages
+4. Confirmation is required before finalizing
+
+Reservation Steps:
+1. WELCOME -> Ask for date and time
+2. COLLECT_GUESTS -> Ask for number of guests
+3. COLLECT_NAME -> Ask for name
+4. COLLECT_PHONE -> Ask for phone number
+5. COLLECT_SPECIAL_REQUESTS -> Ask for any special requests
+6. CONFIRM -> Show summary and ask for confirmation
+7. COMPLETE -> Create reservation or handle corrections
 """
 
 import json
 import logging
 import os
 import re
+from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 from openai import OpenAI
@@ -40,37 +56,104 @@ memory = Mem0MemoryManager.get_instance()
 
 
 # ============================================================================
+# Reservation State Machine
+# ============================================================================
+
+class ReservationStep(Enum):
+    """Steps in the reservation flow."""
+    IDLE = "idle"  # Not in reservation flow
+    COLLECT_DATETIME = "collect_datetime"  # Step 1: Get date and time
+    COLLECT_GUESTS = "collect_guests"  # Step 2: Get number of guests
+    COLLECT_NAME = "collect_name"  # Step 3: Get name
+    COLLECT_PHONE = "collect_phone"  # Step 4: Get phone number
+    COLLECT_SPECIAL = "collect_special"  # Step 5: Get special requests
+    CONFIRM = "confirm"  # Step 6: Confirm details
+    COMPLETE = "complete"  # Step 7: Reservation complete
+
+
+@dataclass
+class ReservationData:
+    """Structured data for a reservation being built."""
+    date: Optional[str] = None  # YYYY-MM-DD format
+    time: Optional[str] = None  # HH:MM format
+    guests: Optional[int] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    special_requests: Optional[str] = None
+    
+    def is_complete(self) -> bool:
+        """Check if all required fields are filled."""
+        return all([self.date, self.time, self.guests, self.name, self.phone])
+    
+    def get_summary(self) -> str:
+        """Get a formatted summary of the reservation."""
+        lines = []
+        if self.date:
+            lines.append(f"📅 Date: {self.date}")
+        if self.time:
+            lines.append(f"🕐 Time: {self.time}")
+        if self.guests:
+            lines.append(f"👥 Guests: {self.guests}")
+        if self.name:
+            lines.append(f"👤 Name: {self.name}")
+        if self.phone:
+            lines.append(f"📞 Phone: {self.phone}")
+        if self.special_requests:
+            lines.append(f"📝 Special requests: {self.special_requests}")
+        return "\n".join(lines)
+
+
+@dataclass
+class SessionState:
+    """State for a user session."""
+    step: ReservationStep = ReservationStep.IDLE
+    reservation: ReservationData = field(default_factory=ReservationData)
+    conversation_history: List[Dict] = field(default_factory=list)
+    last_activity: str = ""
+    
+    def reset_reservation(self):
+        """Reset the reservation data but keep conversation history."""
+        self.step = ReservationStep.IDLE
+        self.reservation = ReservationData()
+
+
+# Store session states by user_id
+_session_states: Dict[str, SessionState] = {}
+
+
+def get_session_state(user_id: str) -> SessionState:
+    """Get or create session state for a user."""
+    if user_id not in _session_states:
+        _session_states[user_id] = SessionState()
+        _session_states[user_id].last_activity = datetime.now(ZAGREB_TZ).isoformat()
+    return _session_states[user_id]
+
+
+def clear_session_state(user_id: str) -> bool:
+    """Clear session state for a user."""
+    if user_id in _session_states:
+        del _session_states[user_id]
+        return True
+    return False
+
+
+# ============================================================================
 # Utility Functions
 # ============================================================================
 
 def parse_date_string(date_str: str) -> str:
     """
     Parse various date formats and return standardized YYYY-MM-DD format.
-    
-    Supports:
-    - ISO format: "2026-01-10", "2026/01/10"
-    - Natural language: "today", "tomorrow", "day after tomorrow"
-    - Day names: "monday", "tuesday", "next friday", etc.
-    - Relative: "in 2 days", "in a week"
-    
-    Returns:
-        str: Date in YYYY-MM-DD format
-    
-    Raises:
-        ValueError: If the date format cannot be parsed
     """
     if not date_str:
         raise ValueError("Date string is empty")
     
-    # Clean up the input
     date_str = date_str.strip().lower()
-    
-    # Get current date in Zagreb timezone
     now = datetime.now(ZAGREB_TZ)
     today = now.date()
     
     # Natural language dates
-    if date_str in ['today', 'danas']:
+    if date_str in ['today', 'danas', 'tonight', 'this evening']:
         return today.strftime('%Y-%m-%d')
     
     if date_str in ['tomorrow', 'sutra']:
@@ -86,21 +169,10 @@ def parse_date_string(date_str: str) -> str:
         days = int(match.group(1))
         return (today + timedelta(days=days)).strftime('%Y-%m-%d')
     
-    # "in a week" / "in X weeks"
-    if date_str == 'in a week':
-        return (today + timedelta(weeks=1)).strftime('%Y-%m-%d')
-    
-    in_weeks_pattern = r'^in\s+(\d+)\s+weeks?$'
-    match = re.match(in_weeks_pattern, date_str)
-    if match:
-        weeks = int(match.group(1))
-        return (today + timedelta(weeks=weeks)).strftime('%Y-%m-%d')
-    
-    # Day names (find next occurrence)
+    # Day names
     day_names = {
         'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
         'friday': 4, 'saturday': 5, 'sunday': 6,
-        # Croatian
         'ponedjeljak': 0, 'utorak': 1, 'srijeda': 2, 'cetvrtak': 3,
         'petak': 4, 'subota': 5, 'nedjelja': 6
     }
@@ -114,72 +186,40 @@ def parse_date_string(date_str: str) -> str:
             target_weekday = day_names[day_name]
             current_weekday = today.weekday()
             days_ahead = target_weekday - current_weekday
-            if days_ahead <= 0:  # Target day already happened this week
+            if days_ahead <= 0:
                 days_ahead += 7
             return (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
     
-    # Just day name (find next occurrence, including today if it matches)
+    # Just day name
     if date_str in day_names:
         target_weekday = day_names[date_str]
         current_weekday = today.weekday()
         days_ahead = target_weekday - current_weekday
-        if days_ahead < 0:  # Target day already happened this week
+        if days_ahead < 0:
             days_ahead += 7
         return (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
     
-    # Try to parse ISO format: YYYY-MM-DD
-    try:
-        parsed = datetime.strptime(date_str, '%Y-%m-%d')
-        return parsed.strftime('%Y-%m-%d')
-    except ValueError:
-        pass
+    # Try various date formats
+    for fmt in ['%Y-%m-%d', '%Y/%m/%d', '%d/%m/%Y', '%d.%m.%Y', '%d-%m-%Y']:
+        try:
+            parsed = datetime.strptime(date_str, fmt)
+            return parsed.strftime('%Y-%m-%d')
+        except ValueError:
+            pass
     
-    # Try to parse with slashes: YYYY/MM/DD
-    try:
-        parsed = datetime.strptime(date_str, '%Y/%m/%d')
-        return parsed.strftime('%Y-%m-%d')
-    except ValueError:
-        pass
-    
-    # Try to parse DD/MM/YYYY (European format)
-    try:
-        parsed = datetime.strptime(date_str, '%d/%m/%Y')
-        return parsed.strftime('%Y-%m-%d')
-    except ValueError:
-        pass
-    
-    # Try to parse DD.MM.YYYY (European format with dots)
-    try:
-        parsed = datetime.strptime(date_str, '%d.%m.%Y')
-        return parsed.strftime('%Y-%m-%d')
-    except ValueError:
-        pass
-    
-    raise ValueError(f"Unable to parse date format: '{date_str}'. Please use formats like 'tomorrow', 'next friday', or 'YYYY-MM-DD'")
+    raise ValueError(f"Unable to parse date: '{date_str}'")
 
 
 def parse_time_string(time_str: str) -> str:
     """
     Parse various time formats and return standardized HH:MM format (24-hour).
-    
-    Supports:
-    - 12-hour format: "7pm", "7:30pm", "7 pm", "7:30 PM", "11am"
-    - 24-hour format: "19:00", "19:30", "09:00"
-    - Hour only: "19", "9" (treated as HH:00)
-    
-    Returns:
-        str: Time in HH:MM format (24-hour)
-    
-    Raises:
-        ValueError: If the time format cannot be parsed
     """
     if not time_str:
         raise ValueError("Time string is empty")
     
-    # Clean up the input
     time_str = time_str.strip().lower().replace(' ', '')
     
-    # Pattern for 12-hour format with am/pm: "7pm", "7:30pm", "11am", "12:30am"
+    # 12-hour format: "7pm", "7:30pm", "11am"
     pattern_12h = r'^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$'
     match = re.match(pattern_12h, time_str)
     
@@ -188,23 +228,21 @@ def parse_time_string(time_str: str) -> str:
         minute = int(match.group(2)) if match.group(2) else 0
         period = match.group(3)
         
-        # Validate hour for 12-hour format
         if hour < 1 or hour > 12:
-            raise ValueError(f"Invalid hour in 12-hour format: {hour}")
+            raise ValueError(f"Invalid hour: {hour}")
         if minute < 0 or minute > 59:
             raise ValueError(f"Invalid minute: {minute}")
         
-        # Convert to 24-hour format
         if period == 'am':
-            if hour == 12:  # 12am is midnight (00:00)
+            if hour == 12:
                 hour = 0
-        else:  # pm
-            if hour != 12:  # 12pm stays as 12
+        else:
+            if hour != 12:
                 hour += 12
         
         return f"{hour:02d}:{minute:02d}"
     
-    # Pattern for 24-hour format: "19:00", "19:30", "09:00", "9:00"
+    # 24-hour format: "19:00", "19:30"
     pattern_24h = r'^(\d{1,2}):(\d{2})$'
     match = re.match(pattern_24h, time_str)
     
@@ -212,15 +250,14 @@ def parse_time_string(time_str: str) -> str:
         hour = int(match.group(1))
         minute = int(match.group(2))
         
-        # Validate hour and minute
         if hour < 0 or hour > 23:
-            raise ValueError(f"Invalid hour in 24-hour format: {hour}")
+            raise ValueError(f"Invalid hour: {hour}")
         if minute < 0 or minute > 59:
             raise ValueError(f"Invalid minute: {minute}")
         
         return f"{hour:02d}:{minute:02d}"
     
-    # Pattern for hour-only 24-hour format: "19", "9"
+    # Hour only: "19", "9"
     pattern_hour_only = r'^(\d{1,2})$'
     match = re.match(pattern_hour_only, time_str)
     
@@ -230,14 +267,10 @@ def parse_time_string(time_str: str) -> str:
             raise ValueError(f"Invalid hour: {hour}")
         return f"{hour:02d}:00"
     
-    raise ValueError(f"Unable to parse time format: '{time_str}'. Please use formats like '7pm', '7:30pm', '19:00', or '19:30'")
+    raise ValueError(f"Unable to parse time: '{time_str}'")
 
 
-# ============================================================================
-# Tool Function Implementations
-# ============================================================================
-
-def tool_get_current_datetime() -> Dict[str, Any]:
+def get_current_datetime() -> Dict[str, Any]:
     """Get the current date and time for CET:Zagreb timezone."""
     now = datetime.now(ZAGREB_TZ)
     return {
@@ -249,71 +282,612 @@ def tool_get_current_datetime() -> Dict[str, Any]:
     }
 
 
-def tool_recall_user_info(user_id: str) -> str:
-    """Recall what we know about a user from memory."""
-    if not memory.is_available:
-        return "Memory system is not available. Treating as a new guest."
+# ============================================================================
+# LLM-based Information Extraction
+# ============================================================================
+
+def extract_reservation_info(message: str, current_step: ReservationStep) -> Dict[str, Any]:
+    """
+    Use LLM to extract structured reservation information from user message.
+    Returns a dictionary with extracted fields.
+    """
+    now = datetime.now(ZAGREB_TZ)
     
-    context = memory.get_user_context(user_id)
-    return context
+    extraction_prompt = f"""Extract reservation information from the user's message.
+Current date/time: {now.strftime('%Y-%m-%d %H:%M')} ({now.strftime('%A')})
+Current step in reservation: {current_step.value}
+
+User message: "{message}"
+
+Extract any of the following information if present:
+- date: The reservation date (convert to YYYY-MM-DD format, "today"/"tonight" = {now.strftime('%Y-%m-%d')}, "tomorrow" = {(now + timedelta(days=1)).strftime('%Y-%m-%d')})
+- time: The reservation time (convert to HH:MM 24-hour format, e.g., "8pm" = "20:00")
+- guests: Number of guests (integer)
+- name: Guest name
+- phone: Phone number
+- special_requests: Any special requests or preferences
+- wants_reservation: true if user wants to make a reservation, false if asking about something else
+- confirmation: "yes" if user confirms, "no" if user wants to change something, null otherwise
+- correction_field: If user wants to correct something, which field (date/time/guests/name/phone/special_requests)
+- correction_value: The new value for the correction
+
+Return ONLY a valid JSON object with these fields. Use null for fields not mentioned.
+Example: {{"date": "2026-01-12", "time": "20:00", "guests": 3, "name": null, "phone": null, "special_requests": null, "wants_reservation": true, "confirmation": null, "correction_field": null, "correction_value": null}}"""
+
+    try:
+        response = client.responses.create(
+            model="gpt-4.1-nano",  # Fast extraction model
+            input=[{"role": "user", "content": extraction_prompt}],
+            temperature=0
+        )
+        
+        result_text = response.output_text.strip()
+        
+        # Clean up the response - remove markdown code blocks if present
+        if result_text.startswith("```"):
+            result_text = re.sub(r'^```(?:json)?\n?', '', result_text)
+            result_text = re.sub(r'\n?```$', '', result_text)
+        
+        extracted = json.loads(result_text)
+        logger.info(f"Extracted from message: {extracted}")
+        return extracted
+        
+    except Exception as e:
+        logger.error(f"Error extracting reservation info: {e}")
+        return {}
 
 
-def tool_remember_user_preference(user_id: str, preference_type: str, preference: str) -> Dict[str, Any]:
-    """Remember a user's preference for future visits."""
-    if not memory.is_available:
-        return {"success": False, "message": "Memory system is not available."}
+def generate_response(
+    user_message: str,
+    session: SessionState,
+    user_id: str,
+    system_context: str
+) -> str:
+    """
+    Generate a conversational response using the LLM.
+    The LLM handles natural language; Python handles state.
+    """
+    restaurant_name = kb.get_restaurant_name()
+    now = datetime.now(ZAGREB_TZ)
+    
+    # Build the prompt based on current state
+    state_info = f"""
+Current reservation state:
+- Step: {session.step.value}
+- Collected data:
+{session.reservation.get_summary() if session.reservation.date or session.reservation.guests else "  (none yet)"}
+"""
+
+    system_prompt = f"""You are a friendly restaurant booking assistant for {restaurant_name}.
+Current date/time: {now.strftime('%Y-%m-%d %H:%M')} ({now.strftime('%A')})
+
+{system_context}
+
+{state_info}
+
+IMPORTANT RULES:
+1. Be friendly, professional, and concise
+2. Stay focused on the current step - don't ask for information from future steps
+3. If the user provides information for the current step, acknowledge it
+4. If the user asks about something else (menu, hours, etc.), answer briefly then return to the reservation
+5. Use natural, conversational language
+6. Keep responses short (1-3 sentences)"""
+
+    # Include recent conversation history for context
+    messages = []
+    for msg in session.conversation_history[-6:]:  # Last 3 exchanges
+        messages.append(msg)
+    messages.append({"role": "user", "content": user_message})
     
     try:
-        if preference_type == "dietary":
-            success = memory.remember_dietary_preference(user_id, preference)
-        elif preference_type == "seating":
-            success = memory.remember_seating_preference(user_id, preference)
-        else:
-            messages = [
-                {"role": "user", "content": f"I prefer: {preference}"},
-                {"role": "assistant", "content": f"I'll remember that preference."}
-            ]
-            result = memory.add_memory(messages, user_id, metadata={"info_type": "preference"})
-            success = result is not None
-        
-        if success:
-            return {"success": True, "message": f"I'll remember that you {preference}."}
-        else:
-            return {"success": False, "message": "Could not save the preference at this time."}
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            instructions=system_prompt,
+            input=messages
+        )
+        return response.output_text
     except Exception as e:
-        logger.error(f"Error remembering preference: {e}")
-        return {"success": False, "message": "An error occurred while saving the preference."}
+        logger.error(f"Error generating response: {e}")
+        return "I apologize, but I encountered an error. Please try again."
 
 
-def tool_remember_user_name(user_id: str, name: str) -> Dict[str, Any]:
-    """Remember a user's name for future interactions."""
-    if not memory.is_available:
-        return {"success": False, "message": "Memory system is not available."}
-    
-    success = memory.remember_user_name(user_id, name)
-    
-    if success:
-        return {"success": True, "message": f"Nice to meet you, {name}! I'll remember your name."}
-    else:
-        return {"success": False, "message": "Could not save the name at this time."}
+# ============================================================================
+# Reservation Flow Logic
+# ============================================================================
+
+def validate_datetime(date_str: str, time_str: str) -> Tuple[bool, str]:
+    """Validate that the date and time are valid for a reservation."""
+    try:
+        reservation_datetime = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        reservation_datetime = ZAGREB_TZ.localize(reservation_datetime)
+        
+        now = datetime.now(ZAGREB_TZ)
+        settings = kb.get_reservation_settings()
+        
+        # Check if in the past
+        if reservation_datetime <= now:
+            return False, "That time has already passed. Please choose a future date and time."
+        
+        # Check advance booking
+        hours_until = (reservation_datetime - now).total_seconds() / 3600
+        if hours_until < settings.advance_booking_hours:
+            return False, f"Reservations must be made at least {settings.advance_booking_hours} hour(s) in advance."
+        
+        # Check if restaurant is open
+        day_name = reservation_datetime.strftime('%A').lower()
+        hours = kb.get_operating_hours(day_name)
+        day_hours = hours.get(day_name)
+        
+        if day_hours.is_closed:
+            return False, f"Sorry, we're closed on {day_name.capitalize()}s."
+        
+        open_time = datetime.strptime(day_hours.open, "%H:%M").time()
+        close_time = datetime.strptime(day_hours.close, "%H:%M").time()
+        res_time = reservation_datetime.time()
+        
+        closes_at_midnight = (close_time.hour == 0 and close_time.minute == 0)
+        
+        if closes_at_midnight:
+            if res_time < open_time:
+                return False, f"We open at {day_hours.open} on {day_name.capitalize()}s."
+        else:
+            if res_time < open_time or res_time >= close_time:
+                return False, f"We're open from {day_hours.open} to {day_hours.close} on {day_name.capitalize()}s."
+        
+        return True, "Valid"
+        
+    except Exception as e:
+        return False, str(e)
 
 
-def tool_search_user_memories(user_id: str, query: str) -> str:
-    """Search for specific information in a user's memories."""
-    if not memory.is_available:
-        return "Memory system is not available."
+def process_reservation_step(
+    message: str,
+    session: SessionState,
+    user_id: str,
+    extracted: Dict[str, Any]
+) -> str:
+    """
+    Process the current reservation step and return the response.
+    This is the main state machine logic.
+    """
+    restaurant_name = kb.get_restaurant_name()
+    step = session.step
+    res = session.reservation
     
-    results = memory.search_memories(query, user_id, limit=5)
+    # Handle non-reservation queries
+    if step == ReservationStep.IDLE:
+        # Check if user wants to make a reservation
+        if extracted.get('wants_reservation') or extracted.get('date') or extracted.get('time') or extracted.get('guests'):
+            # Start reservation flow
+            session.step = ReservationStep.COLLECT_DATETIME
+            
+            # Check if they already provided date/time
+            if extracted.get('date'):
+                try:
+                    res.date = parse_date_string(extracted['date'])
+                except:
+                    res.date = extracted.get('date')
+            
+            if extracted.get('time'):
+                try:
+                    res.time = parse_time_string(extracted['time'])
+                except:
+                    res.time = extracted.get('time')
+            
+            if extracted.get('guests'):
+                res.guests = extracted['guests']
+            
+            if extracted.get('name'):
+                res.name = extracted['name']
+            
+            if extracted.get('phone'):
+                res.phone = extracted['phone']
+            
+            # Determine which step we should be on based on what we have
+            if res.date and res.time:
+                # Validate datetime
+                valid, error_msg = validate_datetime(res.date, res.time)
+                if not valid:
+                    res.date = None
+                    res.time = None
+                    return f"Welcome to {restaurant_name}! I'd love to help you with a reservation. {error_msg} When would you like to visit us?"
+                
+                if res.guests:
+                    if res.name:
+                        if res.phone:
+                            session.step = ReservationStep.COLLECT_SPECIAL
+                            return f"Great! I have your reservation for {res.date} at {res.time} for {res.guests} guests under the name {res.name}. Do you have any special requests or dietary requirements?"
+                        else:
+                            session.step = ReservationStep.COLLECT_PHONE
+                            return f"Thank you, {res.name}! What phone number can we reach you at for the reservation?"
+                    else:
+                        session.step = ReservationStep.COLLECT_NAME
+                        return f"Perfect! A table for {res.guests} on {res.date} at {res.time}. May I have your name for the reservation?"
+                else:
+                    session.step = ReservationStep.COLLECT_GUESTS
+                    return f"Wonderful! {res.date} at {res.time}. How many guests will be joining?"
+            else:
+                return f"Welcome to {restaurant_name}! I'd be happy to help you make a reservation. What date and time would you like to visit us?"
+        else:
+            # General query - let LLM handle it
+            return generate_response(
+                message, session, user_id,
+                "The user is asking a general question. Answer it helpfully, then ask if they'd like to make a reservation."
+            )
     
-    if results.count == 0:
-        return f"No memories found for query: '{query}'"
+    # Step 1: Collect date and time
+    elif step == ReservationStep.COLLECT_DATETIME:
+        if extracted.get('date'):
+            try:
+                res.date = parse_date_string(extracted['date'])
+            except:
+                res.date = extracted.get('date')
+        
+        if extracted.get('time'):
+            try:
+                res.time = parse_time_string(extracted['time'])
+            except:
+                res.time = extracted.get('time')
+        
+        # Also capture any other info they provide
+        if extracted.get('guests'):
+            res.guests = extracted['guests']
+        if extracted.get('name'):
+            res.name = extracted['name']
+        if extracted.get('phone'):
+            res.phone = extracted['phone']
+        
+        if res.date and res.time:
+            # Validate
+            valid, error_msg = validate_datetime(res.date, res.time)
+            if not valid:
+                res.date = None
+                res.time = None
+                return f"{error_msg} What date and time would work for you?"
+            
+            session.step = ReservationStep.COLLECT_GUESTS
+            if res.guests:
+                # Already have guests, move to next step
+                session.step = ReservationStep.COLLECT_NAME
+                if res.name:
+                    session.step = ReservationStep.COLLECT_PHONE
+                    if res.phone:
+                        session.step = ReservationStep.COLLECT_SPECIAL
+                        return f"Excellent! I have {res.date} at {res.time} for {res.guests} guests, name {res.name}, phone {res.phone}. Any special requests?"
+                    return f"Thank you, {res.name}! What's the best phone number to reach you?"
+                return f"Perfect! {res.date} at {res.time} for {res.guests} guests. May I have your name?"
+            return f"Great! {res.date} at {res.time}. How many guests will be dining with us?"
+        elif res.date:
+            return f"Got it, {res.date}. What time would you like to arrive?"
+        elif res.time:
+            return f"Got it, {res.time}. What date would you like to come?"
+        else:
+            return "I didn't catch the date and time. When would you like to make your reservation? For example, 'tomorrow at 7pm' or 'Saturday at 8pm'."
     
-    response_parts = [f"Found {results.count} relevant memories:"]
-    for mem in results.memories:
-        response_parts.append(f"- {mem.memory}")
+    # Step 2: Collect number of guests
+    elif step == ReservationStep.COLLECT_GUESTS:
+        if extracted.get('guests'):
+            res.guests = extracted['guests']
+            
+            # Validate guest count
+            settings = kb.get_reservation_settings()
+            if res.guests < settings.min_guests:
+                res.guests = None
+                return f"We require at least {settings.min_guests} guest for a reservation. How many will be joining?"
+            if res.guests > settings.max_guests:
+                res.guests = None
+                return f"For parties larger than {settings.max_guests}, please call us directly. How many guests (up to {settings.max_guests})?"
+            
+            session.step = ReservationStep.COLLECT_NAME
+            if extracted.get('name'):
+                res.name = extracted['name']
+                session.step = ReservationStep.COLLECT_PHONE
+                if extracted.get('phone'):
+                    res.phone = extracted['phone']
+                    session.step = ReservationStep.COLLECT_SPECIAL
+                    return f"Perfect! Reservation for {res.guests} under {res.name}. Any special requests or dietary requirements?"
+                return f"Thank you, {res.name}! What phone number can we reach you at?"
+            return f"Wonderful, a table for {res.guests}! May I have your name for the reservation?"
+        else:
+            return "How many guests will be joining you? Please let me know the number of people."
     
-    return "\n".join(response_parts)
+    # Step 3: Collect name
+    elif step == ReservationStep.COLLECT_NAME:
+        if extracted.get('name'):
+            res.name = extracted['name']
+            session.step = ReservationStep.COLLECT_PHONE
+            if extracted.get('phone'):
+                res.phone = extracted['phone']
+                session.step = ReservationStep.COLLECT_SPECIAL
+                return f"Thank you, {res.name}! Do you have any special requests or dietary requirements for your visit?"
+            return f"Thank you, {res.name}! What phone number can we reach you at for the reservation?"
+        else:
+            return "May I have your name for the reservation?"
+    
+    # Step 4: Collect phone
+    elif step == ReservationStep.COLLECT_PHONE:
+        if extracted.get('phone'):
+            res.phone = extracted['phone']
+            session.step = ReservationStep.COLLECT_SPECIAL
+            return f"Got it! Do you have any special requests or dietary requirements? (Say 'no' or 'none' if not)"
+        else:
+            return "What phone number can we reach you at? This is required for the reservation."
+    
+    # Step 5: Collect special requests
+    elif step == ReservationStep.COLLECT_SPECIAL:
+        # Accept any response - even "no" or "none"
+        if extracted.get('special_requests'):
+            res.special_requests = extracted['special_requests']
+        elif message.lower().strip() not in ['no', 'none', 'nothing', 'nope', 'n/a']:
+            # If they said something that wasn't extracted as special request, use the message
+            if len(message.strip()) > 2:
+                res.special_requests = message.strip()
+        
+        session.step = ReservationStep.CONFIRM
+        
+        # Show confirmation
+        summary = f"""
+Perfect! Here's your reservation summary:
 
+📅 Date: {res.date}
+🕐 Time: {res.time}
+👥 Guests: {res.guests}
+👤 Name: {res.name}
+📞 Phone: {res.phone}"""
+        
+        if res.special_requests:
+            summary += f"\n📝 Special requests: {res.special_requests}"
+        
+        summary += "\n\nIs everything correct? (Yes to confirm, or tell me what to change)"
+        return summary
+    
+    # Step 6: Confirmation
+    elif step == ReservationStep.CONFIRM:
+        confirmation = extracted.get('confirmation')
+        
+        if confirmation == 'yes' or message.lower().strip() in ['yes', 'yeah', 'yep', 'correct', 'confirmed', 'confirm', 'da', 'ok', 'okay']:
+            # Create the reservation
+            return create_reservation(session, user_id)
+        
+        elif confirmation == 'no' or extracted.get('correction_field'):
+            # Handle correction
+            field = extracted.get('correction_field')
+            value = extracted.get('correction_value')
+            
+            if field and value:
+                if field == 'date':
+                    try:
+                        res.date = parse_date_string(value)
+                    except:
+                        res.date = value
+                elif field == 'time':
+                    try:
+                        res.time = parse_time_string(value)
+                    except:
+                        res.time = value
+                elif field == 'guests':
+                    res.guests = int(value) if isinstance(value, str) else value
+                elif field == 'name':
+                    res.name = value
+                elif field == 'phone':
+                    res.phone = value
+                elif field == 'special_requests':
+                    res.special_requests = value
+                
+                # Show updated summary
+                summary = f"""
+Updated! Here's your reservation:
+
+📅 Date: {res.date}
+🕐 Time: {res.time}
+👥 Guests: {res.guests}
+👤 Name: {res.name}
+📞 Phone: {res.phone}"""
+                
+                if res.special_requests:
+                    summary += f"\n📝 Special requests: {res.special_requests}"
+                
+                summary += "\n\nIs this correct now? (Yes to confirm)"
+                return summary
+            else:
+                return "What would you like to change? Please tell me the field (date, time, guests, name, phone, or special requests) and the new value."
+        else:
+            return "Please confirm your reservation by saying 'yes', or tell me what you'd like to change."
+    
+    # Step 7: Complete (shouldn't normally reach here)
+    elif step == ReservationStep.COMPLETE:
+        session.reset_reservation()
+        return "Your reservation is complete! Is there anything else I can help you with?"
+    
+    return "I'm sorry, I didn't understand that. How can I help you?"
+
+
+def create_reservation(session: SessionState, user_id: str) -> str:
+    """Create the actual reservation in the database."""
+    res = session.reservation
+    
+    try:
+        # Final validation
+        if not res.is_complete():
+            return "I'm missing some information. Let me start over. What date and time would you like?"
+        
+        valid, error_msg = validate_datetime(res.date, res.time)
+        if not valid:
+            session.step = ReservationStep.COLLECT_DATETIME
+            res.date = None
+            res.time = None
+            return f"{error_msg} What date and time would work instead?"
+        
+        # Create reservation
+        reservation_datetime = datetime.strptime(f"{res.date} {res.time}", "%Y-%m-%d %H:%M")
+        reservation_datetime = ZAGREB_TZ.localize(reservation_datetime)
+        
+        db = DatabaseManager.get_instance()
+        now = datetime.now(ZAGREB_TZ)
+        
+        reservation = db.create_reservation(
+            user_id=user_id,
+            user_name=res.name,
+            phone_number=res.phone,
+            number_of_guests=res.guests,
+            date_time=reservation_datetime,
+            time_slot=2.0,
+            time_created=now.strftime('%Y-%m-%d %H:%M:%S')
+        )
+        
+        if reservation:
+            # Store in memory
+            if memory.is_available:
+                memory.remember_user_name(user_id, res.name)
+                memory.remember_reservation(
+                    user_id,
+                    reservation.id,
+                    reservation_datetime.strftime('%Y-%m-%d %H:%M'),
+                    res.guests
+                )
+                if res.special_requests:
+                    memory.remember_seating_preference(user_id, res.special_requests)
+            
+            session.step = ReservationStep.COMPLETE
+            
+            restaurant_name = kb.get_restaurant_name()
+            return f"""
+✅ Reservation Confirmed!
+
+Your reservation ID is #{reservation.id}
+
+📅 {res.date} at {res.time}
+👥 {res.guests} guests
+👤 {res.name}
+📞 {res.phone}
+{f"📝 {res.special_requests}" if res.special_requests else ""}
+
+Thank you for choosing {restaurant_name}! We look forward to seeing you.
+
+Is there anything else I can help you with?"""
+        else:
+            return "I'm sorry, there was an error creating your reservation. Please try again or call us directly."
+            
+    except Exception as e:
+        logger.error(f"Error creating reservation: {e}", exc_info=True)
+        return f"I apologize, but there was an error: {str(e)}. Please try again."
+
+
+# ============================================================================
+# Main Processing Function
+# ============================================================================
+
+def process_booking_message(
+    message: str,
+    user_id: str,
+    conversation_history: List[Dict] = None,
+    user_name: str = None,
+    phone_number: str = None
+) -> Tuple[str, List[Dict]]:
+    """
+    Process a booking message using the structured state machine.
+    
+    Args:
+        message: The user's message text
+        user_id: Unique identifier for the user
+        conversation_history: Previous conversation history (for compatibility)
+        user_name: User's name (optional)
+        phone_number: User's phone number (optional)
+        
+    Returns:
+        Tuple of (agent_response, updated_conversation_history)
+    """
+    # Get session state
+    session = get_session_state(user_id)
+    session.last_activity = datetime.now(ZAGREB_TZ).isoformat()
+    
+    # Update conversation history
+    if conversation_history:
+        session.conversation_history = conversation_history
+    
+    session.conversation_history.append({
+        "role": "user",
+        "content": message
+    })
+    
+    # Pre-fill known info if provided
+    if user_name and not session.reservation.name:
+        session.reservation.name = user_name
+    if phone_number and not session.reservation.phone:
+        session.reservation.phone = phone_number
+    
+    # Extract structured information from the message
+    extracted = extract_reservation_info(message, session.step)
+    
+    # Process based on current step
+    response = process_reservation_step(message, session, user_id, extracted)
+    
+    # Update conversation history
+    session.conversation_history.append({
+        "role": "assistant",
+        "content": response
+    })
+    
+    # Limit history size
+    if len(session.conversation_history) > 40:
+        session.conversation_history = session.conversation_history[-40:]
+    
+    # Store in memory
+    if memory.is_available:
+        memory.store_conversation_memory(user_id, message, response)
+    
+    logger.info(f"User {user_id} - Step: {session.step.value} - Response: {response[:100]}...")
+    
+    return response, session.conversation_history
+
+
+# ============================================================================
+# Compatibility Functions
+# ============================================================================
+
+def get_or_create_history(user_id: str) -> List[Dict]:
+    """Get or create conversation history for a user."""
+    session = get_session_state(user_id)
+    return session.conversation_history
+
+
+def update_history(user_id: str, history: List[Dict]) -> None:
+    """Update conversation history for a user."""
+    session = get_session_state(user_id)
+    session.conversation_history = history
+
+
+def clear_user_conversation(user_id: str) -> bool:
+    """Clear conversation history for a specific user."""
+    return clear_session_state(user_id)
+
+
+def get_active_conversations() -> List[str]:
+    """Get list of active conversation user IDs."""
+    return list(_session_states.keys())
+
+
+def process_chatwoot_message(
+    message: str,
+    user_id: str,
+    user_name: str = None,
+    phone_number: str = None
+) -> str:
+    """
+    Process a message from Chatwoot webhook.
+    """
+    response, _ = process_booking_message(
+        message=message,
+        user_id=user_id,
+        user_name=user_name,
+        phone_number=phone_number
+    )
+    return response
+
+
+# ============================================================================
+# Knowledge Base and Menu Tools (for general queries)
+# ============================================================================
 
 def tool_get_restaurant_info() -> Dict[str, Any]:
     """Get general information about the restaurant."""
@@ -353,40 +927,6 @@ def tool_get_operating_hours() -> Dict[str, Any]:
     }
 
 
-def tool_get_restaurant_address() -> str:
-    """Get the restaurant's address and location information."""
-    address = kb.get_address()
-    contact = kb.get_contact_info()
-    
-    return f"""Restaurant Address:
-{address.full_address}
-
-Google Maps: {address.google_maps_url}
-
-Contact:
-Phone: {contact.phone}
-Email: {contact.email}
-Website: {contact.website}"""
-
-
-def tool_get_menu_info() -> str:
-    """Get the restaurant's menu with all categories and items."""
-    menu_text = kb.get_menu_formatted()
-    menu_data = kb.get_menu()
-    lunch = menu_data.get('lunch_menu', {})
-    
-    result = menu_text
-    
-    if lunch.get('available'):
-        result += f"\n\n=== LUNCH SPECIAL ===\n"
-        result += f"{lunch.get('description', '')}\n"
-        result += f"Available: {', '.join(d.capitalize() for d in lunch.get('days', []))}\n"
-        result += f"Hours: {lunch.get('hours', '')}\n"
-        result += f"Price: EUR {lunch.get('price', 0):.2f}"
-    
-    return result
-
-
 def tool_search_menu(query: str) -> Dict[str, Any]:
     """Search the menu for specific items."""
     results = kb.search_menu(query)
@@ -406,1086 +946,29 @@ def tool_search_menu(query: str) -> Dict[str, Any]:
     }
 
 
-def tool_get_about_restaurant() -> str:
-    """Get the 'About Us' story of the restaurant."""
-    about = kb.get_about_us()
-    
-    story = about.get('story', {})
-    chef = about.get('chef', {})
-    values = about.get('values', [])
-    
-    result = f"=== {story.get('title', 'Our Story')} ===\n\n"
-    result += '\n\n'.join(story.get('paragraphs', []))
-    
-    result += f"\n\n=== Meet Our Chef ===\n"
-    result += f"{chef.get('name', '')} - {chef.get('title', '')}\n\n"
-    result += f"{chef.get('bio', '')}\n\n"
-    result += f'"{chef.get("philosophy", "")}"'
-    
-    if values:
-        result += "\n\n=== Our Values ===\n"
-        for value in values:
-            result += f"\n{value.get('title', '')}: {value.get('description', '')}"
-    
-    return result
-
-
-def tool_get_reservation_rules() -> str:
-    """Get the restaurant's reservation rules and policies."""
-    settings = kb.get_reservation_settings()
-    
-    return f"""Reservation Rules and Policies:
-
-Guest Limits:
-- Minimum guests per reservation: {settings.min_guests}
-- Maximum guests per reservation: {settings.max_guests}
-- For parties of {settings.large_party_threshold} or more: {settings.large_party_note}
-
-Time Slots:
-- Default reservation duration: {settings.default_time_slot_hours} hours
-- Reservations must be made at least {settings.advance_booking_hours} hour(s) in advance
-- Advance booking available up to {settings.max_advance_booking_days} days ahead
-
-Note: Kitchen closes 1 hour before restaurant closing time.
-Last reservation accepted 2 hours before closing."""
-
-
-def tool_create_reservation(
-    user_id: str,
-    user_name: str,
-    phone_number: str,
-    number_of_guests: int,
-    date: str,
-    time: str,
-    time_slot: float = 2.0
-) -> Dict[str, Any]:
-    """Create a new table reservation at the restaurant."""
-    try:
-        settings = kb.get_reservation_settings()
-        
-        if number_of_guests < settings.min_guests:
-            return {
-                "success": False,
-                "message": f"Minimum {settings.min_guests} guest required for a reservation."
-            }
-        
-        if number_of_guests > settings.max_guests:
-            return {
-                "success": False,
-                "message": f"Maximum {settings.max_guests} guests per reservation. {settings.large_party_note}"
-            }
-        
-        # Parse date
-        try:
-            parsed_date = parse_date_string(date)
-        except ValueError as e:
-            return {"success": False, "message": str(e)}
-        
-        # Parse time
-        try:
-            parsed_time = parse_time_string(time)
-        except ValueError as e:
-            return {"success": False, "message": str(e)}
-        
-        # Parse date and time
-        reservation_datetime = datetime.strptime(f"{parsed_date} {parsed_time}", "%Y-%m-%d %H:%M")
-        reservation_datetime = ZAGREB_TZ.localize(reservation_datetime)
-        
-        # Check if reservation is in the past
-        now = datetime.now(ZAGREB_TZ)
-        if reservation_datetime <= now:
-            return {"success": False, "message": "Cannot make reservations for past dates/times."}
-        
-        # Check advance booking requirement
-        hours_until = (reservation_datetime - now).total_seconds() / 3600
-        if hours_until < settings.advance_booking_hours:
-            return {
-                "success": False,
-                "message": f"Reservations must be made at least {settings.advance_booking_hours} hour(s) in advance."
-            }
-        
-        # Check if restaurant is open on that day/time
-        day_name = reservation_datetime.strftime('%A').lower()
-        hours = kb.get_operating_hours(day_name)
-        day_hours = hours.get(day_name)
-        
-        if day_hours.is_closed:
-            return {
-                "success": False,
-                "message": f"Sorry, the restaurant is closed on {day_name.capitalize()}s."
-            }
-        
-        # Parse operating hours
-        open_time = datetime.strptime(day_hours.open, "%H:%M").time()
-        close_time = datetime.strptime(day_hours.close, "%H:%M").time()
-        reservation_time = reservation_datetime.time()
-        
-        # Handle midnight closing time
-        closes_at_midnight = (close_time.hour == 0 and close_time.minute == 0)
-        
-        if closes_at_midnight:
-            if reservation_time < open_time:
-                return {
-                    "success": False,
-                    "message": f"Sorry, the restaurant opens at {day_hours.open} on {day_name.capitalize()}s."
-                }
-        else:
-            if reservation_time < open_time or reservation_time >= close_time:
-                return {
-                    "success": False,
-                    "message": f"Sorry, the restaurant is only open from {day_hours.open} to {day_hours.close} on {day_name.capitalize()}s."
-                }
-        
-        # Create the reservation
-        db = DatabaseManager.get_instance()
-        time_created = now.strftime('%Y-%m-%d %H:%M:%S')
-        
-        reservation = db.create_reservation(
-            user_id=user_id,
-            user_name=user_name,
-            phone_number=phone_number,
-            number_of_guests=number_of_guests,
-            date_time=reservation_datetime,
-            time_slot=time_slot,
-            time_created=time_created
-        )
-        
-        if reservation:
-            # Store in memory
-            if memory.is_available:
-                memory.remember_reservation(
-                    user_id,
-                    reservation.id,
-                    reservation_datetime.strftime('%Y-%m-%d %H:%M'),
-                    number_of_guests
-                )
-            
-            return {
-                "success": True,
-                "message": f"Reservation confirmed! Your reservation ID is #{reservation.id}.",
-                "reservation": {
-                    "reservation_id": reservation.id,
-                    "user_name": reservation.user_name,
-                    "phone_number": reservation.phone_number,
-                    "number_of_guests": reservation.number_of_guests,
-                    "date_time": reservation.date_time.strftime('%Y-%m-%d %H:%M'),
-                    "time_slot": reservation.time_slot,
-                    "status": reservation.status
-                }
-            }
-        else:
-            return {"success": False, "message": "Failed to create reservation. Please try again."}
-            
-    except Exception as e:
-        logger.error(f"Error creating reservation: {e}", exc_info=True)
-        return {"success": False, "message": f"An error occurred: {str(e)}"}
-
-
-def tool_get_reservation(reservation_id: int) -> Dict[str, Any]:
-    """Get details of a specific reservation by ID."""
-    try:
-        db = DatabaseManager.get_instance()
-        reservation = db.get_reservation(reservation_id)
-        
-        if reservation:
-            return {
-                "success": True,
-                "reservation": {
-                    "reservation_id": reservation.id,
-                    "user_name": reservation.user_name,
-                    "phone_number": reservation.phone_number,
-                    "number_of_guests": reservation.number_of_guests,
-                    "date_time": reservation.date_time.strftime('%Y-%m-%d %H:%M'),
-                    "time_slot": reservation.time_slot,
-                    "status": reservation.status
-                }
-            }
-        else:
-            return {"success": False, "message": f"No reservation found with ID #{reservation_id}."}
-            
-    except Exception as e:
-        logger.error(f"Error getting reservation: {e}")
-        return {"success": False, "message": f"An error occurred: {str(e)}"}
-
-
-def tool_get_user_reservations(user_id: str) -> Dict[str, Any]:
-    """Get all reservations for a specific user."""
-    try:
-        db = DatabaseManager.get_instance()
-        reservations = db.get_user_reservations(user_id)
-        
-        return {
-            "reservations": [
-                {
-                    "reservation_id": r.id,
-                    "user_name": r.user_name,
-                    "phone_number": r.phone_number,
-                    "number_of_guests": r.number_of_guests,
-                    "date_time": r.date_time.strftime('%Y-%m-%d %H:%M'),
-                    "time_slot": r.time_slot,
-                    "status": r.status
-                }
-                for r in reservations
-            ],
-            "count": len(reservations)
-        }
-    except Exception as e:
-        logger.error(f"Error getting user reservations: {e}")
-        return {"reservations": [], "count": 0, "error": str(e)}
-
-
-def tool_cancel_reservation(reservation_id: int, user_id: str) -> Dict[str, Any]:
-    """Cancel an existing reservation."""
-    try:
-        db = DatabaseManager.get_instance()
-        reservation = db.get_reservation(reservation_id)
-        
-        if not reservation:
-            return {"success": False, "message": f"No reservation found with ID #{reservation_id}."}
-        
-        if reservation.user_id != user_id:
-            return {"success": False, "message": "You can only cancel your own reservations."}
-        
-        if reservation.status == 'cancelled':
-            return {"success": False, "message": "This reservation is already cancelled."}
-        
-        success = db.cancel_reservation(reservation_id)
-        
-        if success:
-            return {
-                "success": True,
-                "message": f"Reservation #{reservation_id} has been cancelled successfully."
-            }
-        else:
-            return {"success": False, "message": "Failed to cancel reservation. Please try again."}
-            
-    except Exception as e:
-        logger.error(f"Error cancelling reservation: {e}")
-        return {"success": False, "message": f"An error occurred: {str(e)}"}
-
-
-def tool_update_reservation(
-    reservation_id: int,
-    user_id: str,
-    new_date: Optional[str] = None,
-    new_time: Optional[str] = None,
-    new_guests: Optional[int] = None
-) -> Dict[str, Any]:
-    """Update an existing reservation."""
-    try:
-        db = DatabaseManager.get_instance()
-        reservation = db.get_reservation(reservation_id)
-        
-        if not reservation:
-            return {"success": False, "message": f"No reservation found with ID #{reservation_id}."}
-        
-        if reservation.user_id != user_id:
-            return {"success": False, "message": "You can only modify your own reservations."}
-        
-        if reservation.status == 'cancelled':
-            return {"success": False, "message": "Cannot modify a cancelled reservation."}
-        
-        # Prepare updates
-        updates = {}
-        
-        if new_guests is not None:
-            settings = kb.get_reservation_settings()
-            if new_guests < settings.min_guests or new_guests > settings.max_guests:
-                return {
-                    "success": False,
-                    "message": f"Number of guests must be between {settings.min_guests} and {settings.max_guests}."
-                }
-            updates['number_of_guests'] = new_guests
-        
-        if new_date or new_time:
-            current_date = reservation.date_time.strftime('%Y-%m-%d')
-            current_time = reservation.date_time.strftime('%H:%M')
-            
-            # Parse new date if provided
-            if new_date:
-                try:
-                    parsed_date = parse_date_string(new_date)
-                except ValueError as e:
-                    return {"success": False, "message": str(e)}
-            else:
-                parsed_date = current_date
-            
-            # Parse new time if provided
-            if new_time:
-                try:
-                    parsed_time = parse_time_string(new_time)
-                except ValueError as e:
-                    return {"success": False, "message": str(e)}
-            else:
-                parsed_time = current_time
-            
-            new_datetime = datetime.strptime(f"{parsed_date} {parsed_time}", "%Y-%m-%d %H:%M")
-            new_datetime = ZAGREB_TZ.localize(new_datetime)
-            
-            # Validate new datetime
-            now = datetime.now(ZAGREB_TZ)
-            if new_datetime <= now:
-                return {"success": False, "message": "Cannot set reservation to a past date/time."}
-            
-            # Check operating hours
-            day_name = new_datetime.strftime('%A').lower()
-            hours = kb.get_operating_hours(day_name)
-            day_hours = hours.get(day_name)
-            
-            if day_hours.is_closed:
-                return {
-                    "success": False,
-                    "message": f"Sorry, the restaurant is closed on {day_name.capitalize()}s."
-                }
-            
-            open_time = datetime.strptime(day_hours.open, "%H:%M").time()
-            close_time = datetime.strptime(day_hours.close, "%H:%M").time()
-            reservation_time = new_datetime.time()
-            
-            closes_at_midnight = (close_time.hour == 0 and close_time.minute == 0)
-            
-            if closes_at_midnight:
-                if reservation_time < open_time:
-                    return {
-                        "success": False,
-                        "message": f"Sorry, the restaurant opens at {day_hours.open} on {day_name.capitalize()}s."
-                    }
-            else:
-                if reservation_time < open_time or reservation_time >= close_time:
-                    return {
-                        "success": False,
-                        "message": f"Sorry, the restaurant is only open from {day_hours.open} to {day_hours.close} on {day_name.capitalize()}s."
-                    }
-            
-            updates['date_time'] = new_datetime
-        
-        if not updates:
-            return {"success": False, "message": "No changes specified."}
-        
-        success = db.update_reservation(reservation_id, **updates)
-        
-        if success:
-            updated = db.get_reservation(reservation_id)
-            return {
-                "success": True,
-                "message": f"Reservation #{reservation_id} has been updated successfully.",
-                "reservation": {
-                    "reservation_id": updated.id,
-                    "user_name": updated.user_name,
-                    "phone_number": updated.phone_number,
-                    "number_of_guests": updated.number_of_guests,
-                    "date_time": updated.date_time.strftime('%Y-%m-%d %H:%M'),
-                    "time_slot": updated.time_slot,
-                    "status": updated.status
-                }
-            }
-        else:
-            return {"success": False, "message": "Failed to update reservation. Please try again."}
-            
-    except Exception as e:
-        logger.error(f"Error updating reservation: {e}")
-        return {"success": False, "message": f"An error occurred: {str(e)}"}
-
-
-def tool_check_availability(date: str) -> str:
-    """Check table availability for a specific date."""
-    try:
-        # Parse date
-        try:
-            parsed_date = parse_date_string(date)
-        except ValueError as e:
-            return str(e)
-        
-        target_date = datetime.strptime(parsed_date, '%Y-%m-%d').date()
-        day_name = target_date.strftime('%A').lower()
-        
-        hours = kb.get_operating_hours(day_name)
-        day_hours = hours.get(day_name)
-        
-        if day_hours.is_closed:
-            return f"The restaurant is closed on {day_name.capitalize()}s."
-        
-        db = DatabaseManager.get_instance()
-        reservations = db.get_reservations_by_date(target_date)
-        
-        confirmed = [r for r in reservations if r.status == 'confirmed']
-        
-        summary = f"Availability for {parsed_date} ({day_name.capitalize()}):\n"
-        summary += f"Operating hours: {day_hours.open} - {day_hours.close}\n\n"
-        
-        if not confirmed:
-            summary += "All time slots are currently available!"
-        else:
-            summary += f"Current reservations ({len(confirmed)}):\n"
-            for r in confirmed:
-                end_time = r.date_time.hour + r.time_slot
-                summary += f"- {r.date_time.strftime('%H:%M')} - {int(end_time):02d}:{int((end_time % 1) * 60):02d} ({r.number_of_guests} guests)\n"
-        
-        return summary
-        
-    except Exception as e:
-        return f"An error occurred while checking availability: {str(e)}"
-
-
-# ============================================================================
-# Tool Definitions for Responses API
-# NOTE: We removed user_id from recall_user_info and memory tools because
-# we will inject it automatically at execution time.
-# ============================================================================
-
-TOOLS = [
-    {
-        "type": "function",
-        "name": "get_current_datetime",
-        "description": "Get the current date and time for CET:Zagreb timezone. The system automatically provides this - only call if you need to refresh the time.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "recall_user_info",
-        "description": "Recall what we know about the current user from memory. The user_id is automatically set by the system.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "remember_user_preference",
-        "description": "Remember a user's preference for future visits. Use when a user mentions dietary restrictions, seating preferences, etc. The user_id is automatically set by the system.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "preference_type": {"type": "string", "enum": ["dietary", "seating", "general"], "description": "Type of preference"},
-                "preference": {"type": "string", "description": "The preference to remember"}
-            },
-            "required": ["preference_type", "preference"],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "remember_user_name",
-        "description": "Remember a user's name for future interactions. The user_id is automatically set by the system.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "The user's name"}
-            },
-            "required": ["name"],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "search_user_memories",
-        "description": "Search for specific information in the current user's memories. The user_id is automatically set by the system.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "What to search for in the user's memories"}
-            },
-            "required": ["query"],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "get_restaurant_info",
-        "description": "Get general information about the restaurant including name, description, address, and contact details.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "get_operating_hours",
-        "description": "Get the restaurant's operating hours for all days of the week.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "get_restaurant_address",
-        "description": "Get the restaurant's address and location information.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "get_menu_info",
-        "description": "Get the restaurant's menu with all categories and items.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "search_menu",
-        "description": "Search the menu for specific items by name, description, or dietary tags.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Search term (e.g., 'vegetarian', 'fish', 'truffle')"}
-            },
-            "required": ["query"],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "get_about_restaurant",
-        "description": "Get the 'About Us' story of the restaurant including history, chef info, and values.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "get_reservation_rules",
-        "description": "Get the restaurant's reservation rules and policies.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "create_reservation",
-        "description": "Create a new table reservation. Date supports 'today', 'tomorrow', day names, or YYYY-MM-DD. Time supports 12-hour (7pm) or 24-hour (19:00) formats. Time slot defaults to 2 hours. The user_id is automatically set by the system.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "user_name": {"type": "string", "description": "Name of the guest"},
-                "phone_number": {"type": "string", "description": "Contact phone number"},
-                "number_of_guests": {"type": "integer", "description": "Number of guests"},
-                "date": {"type": "string", "description": "Date - 'today', 'tomorrow', day name, or YYYY-MM-DD"},
-                "time": {"type": "string", "description": "Time - '7pm', '7:30pm', '19:00', etc."},
-                "time_slot": {"type": "number", "description": "Duration in hours (default 2.0)"}
-            },
-            "required": ["user_name", "phone_number", "number_of_guests", "date", "time", "time_slot"],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "get_reservation",
-        "description": "Get details of a specific reservation by ID.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "reservation_id": {"type": "integer", "description": "The reservation ID"}
-            },
-            "required": ["reservation_id"],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "get_user_reservations",
-        "description": "Get all reservations for the current user. The user_id is automatically set by the system.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "cancel_reservation",
-        "description": "Cancel an existing reservation. The user_id is automatically set by the system for verification.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "reservation_id": {"type": "integer", "description": "The reservation ID"}
-            },
-            "required": ["reservation_id"],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "update_reservation",
-        "description": "Update an existing reservation (date, time, or number of guests). Pass null for fields you don't want to change. The user_id is automatically set by the system for verification.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "reservation_id": {"type": "integer", "description": "The reservation ID"},
-                "new_date": {"type": ["string", "null"], "description": "New date or null to keep current"},
-                "new_time": {"type": ["string", "null"], "description": "New time or null to keep current"},
-                "new_guests": {"type": ["integer", "null"], "description": "New number of guests or null to keep current"}
-            },
-            "required": ["reservation_id", "new_date", "new_time", "new_guests"],
-            "additionalProperties": False
-        },
-        "strict": True
-    },
-    {
-        "type": "function",
-        "name": "check_availability",
-        "description": "Check table availability for a specific date.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "date": {"type": "string", "description": "Date to check - 'today', 'tomorrow', day name, or YYYY-MM-DD"}
-            },
-            "required": ["date"],
-            "additionalProperties": False
-        },
-        "strict": True
-    }
-]
-
-
-# ============================================================================
-# Tool Execution with Automatic user_id Injection
-# ============================================================================
-
-def execute_tool(name: str, arguments: Dict[str, Any], session_user_id: str) -> Any:
-    """
-    Execute a tool by name with the given arguments.
-    
-    IMPORTANT: This function automatically injects the session_user_id for all
-    tools that need it, ensuring the model cannot use incorrect user IDs.
-    """
-    # Tools that need user_id injected
-    user_id_tools = {
-        "recall_user_info",
-        "remember_user_preference",
-        "remember_user_name",
-        "search_user_memories",
-        "create_reservation",
-        "get_user_reservations",
-        "cancel_reservation",
-        "update_reservation"
-    }
-    
-    # Inject user_id for tools that need it
-    if name in user_id_tools:
-        arguments["user_id"] = session_user_id
-        logger.info(f"Injected user_id={session_user_id} for tool {name}")
-    
-    tool_map = {
-        "get_current_datetime": lambda args: tool_get_current_datetime(),
-        "recall_user_info": lambda args: tool_recall_user_info(args["user_id"]),
-        "remember_user_preference": lambda args: tool_remember_user_preference(args["user_id"], args["preference_type"], args["preference"]),
-        "remember_user_name": lambda args: tool_remember_user_name(args["user_id"], args["name"]),
-        "search_user_memories": lambda args: tool_search_user_memories(args["user_id"], args["query"]),
-        "get_restaurant_info": lambda args: tool_get_restaurant_info(),
-        "get_operating_hours": lambda args: tool_get_operating_hours(),
-        "get_restaurant_address": lambda args: tool_get_restaurant_address(),
-        "get_menu_info": lambda args: tool_get_menu_info(),
-        "search_menu": lambda args: tool_search_menu(args["query"]),
-        "get_about_restaurant": lambda args: tool_get_about_restaurant(),
-        "get_reservation_rules": lambda args: tool_get_reservation_rules(),
-        "create_reservation": lambda args: tool_create_reservation(
-            args["user_id"], args["user_name"], args["phone_number"],
-            args["number_of_guests"], args["date"], args["time"],
-            args.get("time_slot", 2.0)
-        ),
-        "get_reservation": lambda args: tool_get_reservation(args["reservation_id"]),
-        "get_user_reservations": lambda args: tool_get_user_reservations(args["user_id"]),
-        "cancel_reservation": lambda args: tool_cancel_reservation(args["reservation_id"], args["user_id"]),
-        "update_reservation": lambda args: tool_update_reservation(
-            args["reservation_id"], args["user_id"],
-            args.get("new_date"), args.get("new_time"), args.get("new_guests")
-        ),
-        "check_availability": lambda args: tool_check_availability(args["date"])
-    }
-    
-    if name not in tool_map:
-        return {"error": f"Unknown tool: {name}"}
-    
-    try:
-        result = tool_map[name](arguments)
-        return result
-    except Exception as e:
-        logger.error(f"Error executing tool {name}: {e}", exc_info=True)
-        return {"error": str(e)}
-
-
-# ============================================================================
-# System Instructions
-# ============================================================================
-
-def get_system_instructions(datetime_info: Dict[str, Any], user_memory_context: str) -> str:
-    """
-    Get the system instructions for the booking agent.
-    
-    Now includes pre-fetched datetime and user memory context to avoid
-    the model needing to call these tools at the start of every conversation.
-    """
-    restaurant_name = kb.get_restaurant_name()
-    settings = kb.get_reservation_settings()
-    memory_status = "enabled" if memory.is_available else "disabled (MEM0_API_KEY not set)"
-    
-    return f"""You are a friendly and professional restaurant booking assistant for {restaurant_name}.
-Your role is to help customers make, view, modify, and cancel table reservations, as well as provide information about the restaurant.
-
-=== CURRENT DATE/TIME (CET:Zagreb) ===
-Date: {datetime_info['current_date']} ({datetime_info['day_of_week']})
-Time: {datetime_info['current_time']}
-Timezone: {datetime_info['timezone']}
-
-=== CURRENT USER INFORMATION ===
-{user_memory_context}
-
-CRITICAL RULES FOR CONVERSATION CONTEXT:
-1. You are in an ONGOING conversation with the user
-2. ALWAYS remember what the user said in previous messages
-3. When the user provides their name and phone number, USE the booking details they already gave you (date, time, guests)
-4. DO NOT ask for information the user has already provided
-5. DO NOT treat each message as a new conversation
-6. The user_id is automatically handled by the system - you don't need to worry about it
-
-Memory System Status: {memory_status}
-
-You have access to the restaurant's knowledge base with information about:
-- Restaurant details (name, description, address, contact)
-- Operating hours for each day of the week
-- Full menu with prices and dietary information
-- About us / restaurant story
-- Reservation rules and policies
-
-You also have access to a memory system (Mem0) that allows you to:
-- Remember user names, preferences, and dietary restrictions
-- Recall previous interactions with returning guests
-- Personalize the experience based on past visits
-
-When helping customers with reservations:
-1. Always be polite and helpful
-2. If this is a returning guest (user info shows previous information), greet them by name and acknowledge their preferences
-3. Collect all necessary information: name, phone number, number of guests, preferred date and time
-4. If the user mentions any preferences (dietary, seating, etc.), use remember_user_preference to save them
-5. Confirm all details before making a reservation
-6. Provide the reservation ID after successful booking
-
-Reservation Rules (from knowledge base):
-- Minimum {settings.min_guests} guest, maximum {settings.max_guests} guests per reservation
-- Default time slot is {settings.default_time_slot_hours} hours
-- Reservations must be made at least {settings.advance_booking_hours} hour(s) in advance
-- Phone number is required for all reservations
-- {settings.large_party_note}
-
-When a user wants to make a reservation:
-1. The current date/time is already provided above - no need to call get_current_datetime
-2. The user's memory context is already provided above - no need to call recall_user_info
-3. If returning guest, greet them and pre-fill known information
-4. Ask for any missing information (name, phone, guests, date/time)
-5. Remember any new preferences mentioned
-6. Confirm all details before creating the reservation
-7. Use the create_reservation tool to complete the booking
-
-When users ask about the restaurant:
-- Use get_restaurant_info for general information
-- Use get_operating_hours for business hours
-- Use get_restaurant_address for location and directions
-- Use get_menu_info for the full menu
-- Use search_menu to find specific dishes or dietary options
-- Use get_about_restaurant for the restaurant's story
-- Use get_reservation_rules for booking policies
-
-Memory Tools:
-- Use remember_user_name when a user introduces themselves
-- Use remember_user_preference when users mention dietary restrictions, seating preferences, or other preferences
-- Use search_user_memories to find specific information about a user
-
-Always respond in a natural, conversational manner while being efficient and helpful.
-Only provide information that is available from your tools - do not make up or hallucinate information.
-If you don't have information about a user in memory, simply ask them - don't pretend to remember."""
-
-
-# ============================================================================
-# Main Agent Function - Using Responses API
-# ============================================================================
-
-def process_booking_message(
-    message: str,
-    user_id: str,
-    conversation_history: List[Dict] = None,
-    user_name: str = None,
-    phone_number: str = None
-) -> tuple[str, List[Dict]]:
-    """
-    Process a booking message using OpenAI Responses API.
-    
-    Args:
-        message: The user's message text
-        user_id: Unique identifier for the user (phone number or contact ID)
-        conversation_history: Previous conversation history
-        user_name: User's name (optional)
-        phone_number: User's phone number (optional)
-        
-    Returns:
-        Tuple of (agent_response, updated_conversation_history)
-    """
-    if conversation_history is None:
-        conversation_history = []
-    
-    # Add user message to history
-    conversation_history.append({
-        "role": "user",
-        "content": message
-    })
-    
-    # Pre-fetch datetime and user memory context
-    # This eliminates the need for the model to call these tools
-    datetime_info = tool_get_current_datetime()
-    
-    # Only fetch user memory on first message to avoid redundant calls
-    is_first_message = len(conversation_history) == 1
-    if is_first_message:
-        user_memory_context = tool_recall_user_info(user_id)
-        logger.info(f"First message - fetched user memory for {user_id}")
-    else:
-        # For follow-up messages, indicate this is a continuation
-        user_memory_context = "This is a follow-up message in an ongoing conversation. Use context from previous messages."
-    
-    # Get system instructions with pre-fetched context
-    system_instructions = get_system_instructions(datetime_info, user_memory_context)
-    
-    # Build input for the API - just the conversation history
-    input_items = list(conversation_history)
-    
-    try:
-        # Make initial API request
-        response = client.responses.create(
-            model="gpt-4.1-mini",  # Fast and cost-effective
-            instructions=system_instructions,
-            tools=TOOLS,
-            input=input_items
-        )
-        
-        # Process tool calls in a loop
-        max_iterations = 10  # Prevent infinite loops
-        iteration = 0
-        
-        while iteration < max_iterations:
-            iteration += 1
-            
-            # Check if there are any function calls in the output
-            function_calls = [item for item in response.output if item.type == "function_call"]
-            
-            if not function_calls:
-                # No more function calls, we have the final response
-                break
-            
-            # Add all outputs to input for next request
-            input_items.extend([item.model_dump() for item in response.output])
-            
-            # Execute each function call and add results
-            for call in function_calls:
-                logger.info(f"Executing tool: {call.name} with args: {call.arguments}")
-                
-                # Parse arguments and execute with automatic user_id injection
-                args = json.loads(call.arguments) if call.arguments else {}
-                result = execute_tool(call.name, args, user_id)  # Pass session user_id
-                
-                logger.info(f"Tool {call.name} result: {str(result)[:200]}...")
-                
-                # Add function output
-                input_items.append({
-                    "type": "function_call_output",
-                    "call_id": call.call_id,
-                    "output": json.dumps(result) if not isinstance(result, str) else result
-                })
-            
-            # Make next API request with function outputs
-            response = client.responses.create(
-                model="gpt-4.1-mini",
-                instructions=system_instructions,
-                tools=TOOLS,
-                input=input_items
-            )
-        
-        # Get the final text response
-        agent_response = response.output_text or "I apologize, but I couldn't generate a response. Please try again."
-        
-        # Update conversation history with assistant response
-        conversation_history.append({
-            "role": "assistant",
-            "content": agent_response
-        })
-        
-        # Store in memory if available
-        if memory.is_available:
-            memory.store_conversation_memory(user_id, message, agent_response)
-        
-        logger.info(f"Agent response for user {user_id}: {agent_response[:100]}...")
-        return agent_response, conversation_history
-        
-    except Exception as e:
-        logger.error(f"Error processing booking message: {e}", exc_info=True)
-        error_response = f"I apologize, but I encountered an error: {str(e)}. Please try again."
-        conversation_history.append({
-            "role": "assistant",
-            "content": error_response
-        })
-        return error_response, conversation_history
-
-
-# ============================================================================
-# Conversation History Management
-# ============================================================================
-
-# Store conversation histories by user_id
-_conversation_histories: Dict[str, List[Dict]] = {}
-
-
-def get_or_create_history(user_id: str) -> List[Dict]:
-    """Get or create conversation history for a user."""
-    if user_id not in _conversation_histories:
-        _conversation_histories[user_id] = []
-        logger.info(f"New conversation started for user: {user_id}")
-    return _conversation_histories[user_id]
-
-
-def update_history(user_id: str, history: List[Dict]) -> None:
-    """Update conversation history for a user."""
-    # Limit history size to prevent memory issues (keep last 20 exchanges = 40 messages)
-    if len(history) > 40:
-        history = history[-40:]
-    _conversation_histories[user_id] = history
-
-
-def clear_user_conversation(user_id: str) -> bool:
-    """Clear conversation history for a specific user."""
-    if user_id in _conversation_histories:
-        del _conversation_histories[user_id]
-        return True
-    return False
-
-
-def get_active_conversations() -> List[str]:
-    """Get list of active conversation user IDs."""
-    return list(_conversation_histories.keys())
-
-
-# ============================================================================
-# Wrapper for Chatwoot Integration
-# ============================================================================
-
-def process_chatwoot_message(
-    message: str,
-    user_id: str,
-    user_name: str = None,
-    phone_number: str = None
-) -> str:
-    """
-    Process a message from Chatwoot webhook.
-    
-    This is the main entry point for Chatwoot integration.
-    Maintains conversation history per user.
-    
-    Args:
-        message: The user's message text
-        user_id: Unique identifier for the user
-        user_name: User's name (optional)
-        phone_number: User's phone number (optional)
-        
-    Returns:
-        Agent's response text
-    """
-    # Get existing history
-    history = get_or_create_history(user_id)
-    
-    # Process message
-    response, updated_history = process_booking_message(
-        message=message,
-        user_id=user_id,
-        conversation_history=history,
-        user_name=user_name,
-        phone_number=phone_number
-    )
-    
-    # Update stored history
-    update_history(user_id, updated_history)
-    
-    return response
-
-
 # ============================================================================
 # Test Function
 # ============================================================================
 
 if __name__ == "__main__":
-    print("Testing Restaurant Booking Agent with Responses API...")
-    print("-" * 50)
+    print("Testing Restaurant Booking Agent v3.0 - Structured Flow")
+    print("-" * 60)
     
-    # Test getting current datetime
-    print("\n1. Testing get_current_datetime tool:")
-    dt_info = tool_get_current_datetime()
-    print(f"   Current datetime: {dt_info['full_datetime']}")
+    test_user = "test_user_structured"
     
-    # Test memory availability
-    print("\n2. Testing Mem0 Memory:")
-    print(f"   Memory available: {memory.is_available}")
+    # Simulate a conversation
+    messages = [
+        "Hi, I'd like to book a table",
+        "Tomorrow at 7pm",
+        "4 people",
+        "John Smith",
+        "+1234567890",
+        "Window seat please",
+        "Yes"
+    ]
     
-    # Test knowledge base tools
-    print("\n3. Testing get_restaurant_info tool:")
-    info = tool_get_restaurant_info()
-    print(f"   Restaurant: {info['name']}")
-    print(f"   Address: {info['address']}")
-    print(f"   Currently open: {info['is_currently_open']}")
-    
-    print("\n4. Testing get_operating_hours tool:")
-    hours = tool_get_operating_hours()
-    print(f"   Today's hours: {hours['today_hours']}")
-    print(f"   Status: {hours['current_status']}")
-    
-    print("\n5. Testing search_menu tool:")
-    results = tool_search_menu("truffle")
-    print(f"   Found {results['count']} items with 'truffle'")
-    for item in results['results'][:2]:
-        print(f"   - {item['name']}: EUR {item['price']}")
-    
-    # Test conversation
-    print("\n6. Testing agent conversation:")
-    response, history = process_booking_message(
-        "What are your opening hours?",
-        "test_user_123"
-    )
-    print(f"   Agent: {response[:200]}...")
+    for msg in messages:
+        print(f"\nUser: {msg}")
+        response, _ = process_booking_message(msg, test_user)
+        print(f"Agent: {response}")
+        print("-" * 40)
