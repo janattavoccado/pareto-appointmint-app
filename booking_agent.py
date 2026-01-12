@@ -1146,9 +1146,11 @@ def get_system_instructions() -> str:
     return f"""You are a friendly and professional restaurant booking assistant for {restaurant_name}.
 Your role is to help customers make, view, modify, and cancel table reservations, as well as provide information about the restaurant.
 
-IMPORTANT: At the start of EVERY conversation, you MUST:
-1. Call the get_current_datetime tool to know the current date and time in CET:Zagreb timezone
-2. Call the recall_user_info tool with the user's ID to check if we have any previous information about them
+IMPORTANT RULES:
+1. At the start of a NEW conversation (first message only), call get_current_datetime and recall_user_info
+2. For FOLLOW-UP messages in the same conversation, DO NOT call these tools again - use the context from previous messages
+3. ALWAYS maintain conversation context - remember what the user said in previous messages
+4. The user_id for this conversation is provided in the system context - ALWAYS use that exact user_id for all tools
 
 Memory System Status: {memory_status}
 
@@ -1242,17 +1244,27 @@ def process_booking_message(
     })
     
     # Build input for the API
-    input_items = conversation_history.copy()
+    input_items = []
     
-    # Add context about the user for new conversations
-    if len(conversation_history) == 1 and (user_name or phone_number):
-        context = f"[Context: User ID: {user_id}"
-        if user_name:
-            context += f", Name: {user_name}"
-        if phone_number:
-            context += f", Phone: {phone_number}"
-        context += "]"
-        input_items.insert(0, {"role": "system", "content": context})
+    # ALWAYS add context about the user and conversation state at the beginning
+    is_new_conversation = len(conversation_history) == 1
+    context_parts = [f"User ID for this conversation: {user_id}"]
+    
+    if user_name:
+        context_parts.append(f"User's name: {user_name}")
+    if phone_number:
+        context_parts.append(f"User's phone: {phone_number}")
+    
+    if is_new_conversation:
+        context_parts.append("This is the START of a new conversation. Call get_current_datetime and recall_user_info.")
+    else:
+        context_parts.append(f"This is message #{len(conversation_history)} in an ONGOING conversation. DO NOT call get_current_datetime or recall_user_info again. Use the context from previous messages.")
+    
+    context_message = {"role": "system", "content": "\n".join(context_parts)}
+    input_items.append(context_message)
+    
+    # Add the conversation history
+    input_items.extend(conversation_history)
     
     try:
         # Make initial API request
