@@ -4,13 +4,14 @@ Handles table reservations with CET:Zagreb timezone support.
 Integrates with knowledge base for restaurant information.
 Integrates with Mem0 for persistent user memory across sessions.
 
-VERSION 3.0 - STRUCTURED RESERVATION FLOW
-==========================================
+VERSION 3.1 - STRUCTURED RESERVATION FLOW WITH DATABASE-BACKED STATE
+=====================================================================
 This version implements a state machine for reservations where:
 1. The Python code tracks the reservation state (not the LLM)
 2. Each step collects specific information in order
 3. The LLM extracts structured data from user messages
 4. Confirmation is required before finalizing
+5. Session state is stored in PostgreSQL for multi-worker support
 
 Reservation Steps:
 1. WELCOME -> Ask for date and time
@@ -33,7 +34,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 from openai import OpenAI
-from pydantic import BaseModel, Field
 
 from models import DatabaseManager, Reservation
 from knowledgebase_manager import KnowledgeBaseManager
@@ -101,6 +101,29 @@ class ReservationData:
         if self.special_requests:
             lines.append(f"📝 Special requests: {self.special_requests}")
         return "\n".join(lines)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "date": self.date,
+            "time": self.time,
+            "guests": self.guests,
+            "name": self.name,
+            "phone": self.phone,
+            "special_requests": self.special_requests
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ReservationData':
+        """Create from dictionary."""
+        return cls(
+            date=data.get("date"),
+            time=data.get("time"),
+            guests=data.get("guests"),
+            name=data.get("name"),
+            phone=data.get("phone"),
+            special_requests=data.get("special_requests")
+        )
 
 
 @dataclass
@@ -115,26 +138,78 @@ class SessionState:
         """Reset the reservation data but keep conversation history."""
         self.step = ReservationStep.IDLE
         self.reservation = ReservationData()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "step": self.step.value,
+            "reservation": self.reservation.to_dict(),
+            "conversation_history": self.conversation_history,
+            "last_activity": self.last_activity
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SessionState':
+        """Create from dictionary."""
+        state = cls()
+        state.step = ReservationStep(data.get("step", "idle"))
+        state.reservation = ReservationData.from_dict(data.get("reservation", {}))
+        state.conversation_history = data.get("conversation_history", [])
+        state.last_activity = data.get("last_activity", "")
+        return state
 
 
-# Store session states by user_id
-_session_states: Dict[str, SessionState] = {}
-
+# ============================================================================
+# Database-backed Session State Storage
+# ============================================================================
 
 def get_session_state(user_id: str) -> SessionState:
-    """Get or create session state for a user."""
-    if user_id not in _session_states:
-        _session_states[user_id] = SessionState()
-        _session_states[user_id].last_activity = datetime.now(ZAGREB_TZ).isoformat()
-    return _session_states[user_id]
+    """Get session state for a user from database."""
+    db = DatabaseManager.get_instance()
+    
+    try:
+        # Try to get from database
+        state_json = db.get_session_state(user_id)
+        if state_json:
+            state = SessionState.from_dict(json.loads(state_json))
+            logger.info(f"Loaded session state for {user_id}: step={state.step.value}")
+            return state
+    except Exception as e:
+        logger.error(f"Error loading session state for {user_id}: {e}")
+    
+    # Return new state if not found
+    state = SessionState()
+    state.last_activity = datetime.now(ZAGREB_TZ).isoformat()
+    logger.info(f"Created new session state for {user_id}")
+    return state
+
+
+def save_session_state(user_id: str, state: SessionState) -> bool:
+    """Save session state for a user to database."""
+    db = DatabaseManager.get_instance()
+    
+    try:
+        state.last_activity = datetime.now(ZAGREB_TZ).isoformat()
+        state_json = json.dumps(state.to_dict())
+        db.save_session_state(user_id, state_json)
+        logger.info(f"Saved session state for {user_id}: step={state.step.value}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving session state for {user_id}: {e}")
+        return False
 
 
 def clear_session_state(user_id: str) -> bool:
     """Clear session state for a user."""
-    if user_id in _session_states:
-        del _session_states[user_id]
+    db = DatabaseManager.get_instance()
+    
+    try:
+        db.delete_session_state(user_id)
+        logger.info(f"Cleared session state for {user_id}")
         return True
-    return False
+    except Exception as e:
+        logger.error(f"Error clearing session state for {user_id}: {e}")
+        return False
 
 
 # ============================================================================
@@ -301,11 +376,11 @@ User message: "{message}"
 
 Extract any of the following information if present:
 - date: The reservation date (convert to YYYY-MM-DD format, "today"/"tonight" = {now.strftime('%Y-%m-%d')}, "tomorrow" = {(now + timedelta(days=1)).strftime('%Y-%m-%d')})
-- time: The reservation time (convert to HH:MM 24-hour format, e.g., "8pm" = "20:00")
-- guests: Number of guests (integer)
-- name: Guest name
-- phone: Phone number
-- special_requests: Any special requests or preferences
+- time: The reservation time (convert to HH:MM 24-hour format, e.g., "8pm" = "20:00", "8 o'clock tonight" = "20:00")
+- guests: Number of guests (integer, e.g., "three persons" = 3, "5 people" = 5)
+- name: Guest name (first name or full name)
+- phone: Phone number (any format)
+- special_requests: Any special requests or preferences (window seat, dietary requirements, etc.)
 - wants_reservation: true if user wants to make a reservation, false if asking about something else
 - confirmation: "yes" if user confirms, "no" if user wants to change something, null otherwise
 - correction_field: If user wants to correct something, which field (date/time/guests/name/phone/special_requests)
@@ -797,12 +872,11 @@ def process_booking_message(
     Returns:
         Tuple of (agent_response, updated_conversation_history)
     """
-    # Get session state
+    # Get session state from database
     session = get_session_state(user_id)
-    session.last_activity = datetime.now(ZAGREB_TZ).isoformat()
     
-    # Update conversation history
-    if conversation_history:
+    # Update conversation history from parameter if provided and session is empty
+    if conversation_history and not session.conversation_history:
         session.conversation_history = conversation_history
     
     session.conversation_history.append({
@@ -832,6 +906,9 @@ def process_booking_message(
     if len(session.conversation_history) > 40:
         session.conversation_history = session.conversation_history[-40:]
     
+    # Save session state to database
+    save_session_state(user_id, session)
+    
     # Store in memory
     if memory.is_available:
         memory.store_conversation_memory(user_id, message, response)
@@ -855,6 +932,7 @@ def update_history(user_id: str, history: List[Dict]) -> None:
     """Update conversation history for a user."""
     session = get_session_state(user_id)
     session.conversation_history = history
+    save_session_state(user_id, session)
 
 
 def clear_user_conversation(user_id: str) -> bool:
@@ -864,7 +942,8 @@ def clear_user_conversation(user_id: str) -> bool:
 
 def get_active_conversations() -> List[str]:
     """Get list of active conversation user IDs."""
-    return list(_session_states.keys())
+    # This would need to query the database
+    return []
 
 
 def process_chatwoot_message(
@@ -951,10 +1030,10 @@ def tool_search_menu(query: str) -> Dict[str, Any]:
 # ============================================================================
 
 if __name__ == "__main__":
-    print("Testing Restaurant Booking Agent v3.0 - Structured Flow")
+    print("Testing Restaurant Booking Agent v3.1 - Database-backed State")
     print("-" * 60)
     
-    test_user = "test_user_structured"
+    test_user = "test_user_db_state"
     
     # Simulate a conversation
     messages = [

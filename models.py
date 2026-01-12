@@ -1,262 +1,191 @@
 """
-Database models for restaurant table reservations.
-Uses SQLAlchemy ORM with support for SQLite (local) and PostgreSQL (Heroku).
+Database Model Updates for Session State Storage
+================================================
+
+Add these methods to your existing DatabaseManager class in models.py
+to support persistent session state across multiple workers.
+
+Also add the session_states table creation to init_db().
 """
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, inspect
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from datetime import datetime
-import os
-import threading
+# ============================================================================
+# Add to init_db() function - Create session_states table
+# ============================================================================
 
-Base = declarative_base()
+SESSION_STATES_TABLE_SQL = """
+-- Add this to your init_db() function after the reservations table creation
 
-# Lock for thread-safe database initialization
-_db_init_lock = threading.Lock()
+CREATE TABLE IF NOT EXISTS session_states (
+    user_id TEXT PRIMARY KEY,
+    state_json TEXT NOT NULL,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-
-class Reservation(Base):
-    """
-    Model for storing restaurant table reservations.
-    """
-    __tablename__ = 'reservations'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String(100), nullable=False, index=True)
-    user_name = Column(String(200), nullable=False)
-    phone_number = Column(String(50), nullable=False)
-    number_of_guests = Column(Integer, nullable=False)
-    date_time = Column(DateTime, nullable=False)
-    time_slot = Column(Float, default=2.0)  # Default 2 hours
-    time_created = Column(DateTime, nullable=False)
-    status = Column(String(50), default='confirmed')  # confirmed, cancelled, completed
-
-    def __repr__(self):
-        return f"<Reservation(id={self.id}, user_name='{self.user_name}', date_time='{self.date_time}')>"
-
-    def to_dict(self):
-        """Convert reservation to dictionary for JSON serialization."""
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'user_name': self.user_name,
-            'phone_number': self.phone_number,
-            'number_of_guests': self.number_of_guests,
-            'date_time': self.date_time.strftime('%Y-%m-%d %H:%M') if self.date_time else None,
-            'time_slot': self.time_slot,
-            'time_created': self.time_created.strftime('%Y-%m-%d %H:%M:%S') if self.time_created else None,
-            'status': self.status
-        }
+-- Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_session_states_last_updated 
+ON session_states(last_updated);
+"""
 
 
-def get_database_url():
-    """
-    Get the database URL from environment variables.
-    Handles Heroku's DATABASE_URL format which uses 'postgres://' instead of 'postgresql://'.
-    """
-    database_url = os.getenv('DATABASE_URL')
-    
-    if database_url is None:
-        # Default to SQLite for local development
-        return 'sqlite:///restaurant_bookings.db'
-    
-    # Heroku uses 'postgres://' but SQLAlchemy 1.4+ requires 'postgresql://'
-    if database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    
-    return database_url
+# ============================================================================
+# Add these methods to DatabaseManager class
+# ============================================================================
 
+"""
+Add these three methods to your DatabaseManager class:
 
-class DatabaseManager:
-    """
-    Manager class for database operations.
-    Supports both SQLite (local development) and PostgreSQL (Heroku production).
-    """
-    _instance = None
-    _engine = None
-    _Session = None
-    _initialized = False
-
-    @classmethod
-    def get_instance(cls, database_url: str = None):
-        """Get or create singleton database manager instance."""
-        with _db_init_lock:
-            if cls._instance is None:
-                cls._instance = cls(database_url)
-            return cls._instance
-
-    def __init__(self, database_url: str = None):
-        """Initialize database connection."""
-        if database_url is None:
-            database_url = get_database_url()
-        
-        # Configure engine based on database type
-        if database_url.startswith('sqlite'):
-            # SQLite configuration
-            self._engine = create_engine(
-                database_url,
-                echo=False,
-                connect_args={'check_same_thread': False}
-            )
-        else:
-            # PostgreSQL configuration
-            self._engine = create_engine(
-                database_url,
-                echo=False,
-                pool_size=5,
-                max_overflow=10,
-                pool_pre_ping=True  # Verify connections before using
-            )
-        
-        self._Session = sessionmaker(bind=self._engine)
-        
-        # Create tables if they don't exist (with error handling for race conditions)
-        self._create_tables_safe()
-        
-        db_type = 'PostgreSQL' if 'postgresql' in database_url else 'SQLite'
-        print(f"Database initialized: {db_type}")
-
-    def _create_tables_safe(self):
-        """
-        Safely create tables, handling race conditions when multiple workers start.
-        """
+    def get_session_state(self, user_id: str) -> Optional[str]:
+        '''Get session state JSON for a user.'''
         try:
-            # Check if tables already exist
-            inspector = inspect(self._engine)
-            existing_tables = inspector.get_table_names()
+            if self.db_type == 'postgresql':
+                self.cursor.execute(
+                    "SELECT state_json FROM session_states WHERE user_id = %s",
+                    (user_id,)
+                )
+            else:
+                self.cursor.execute(
+                    "SELECT state_json FROM session_states WHERE user_id = ?",
+                    (user_id,)
+                )
             
-            if 'reservations' not in existing_tables:
-                # Tables don't exist, create them
-                Base.metadata.create_all(self._engine)
-                print("Database tables created successfully")
-            else:
-                print("Database tables already exist")
+            result = self.cursor.fetchone()
+            return result[0] if result else None
         except Exception as e:
-            # If there's a race condition error, tables were likely created by another worker
-            error_str = str(e).lower()
-            if 'already exists' in error_str or 'duplicate' in error_str:
-                print("Database tables already exist (created by another worker)")
-            else:
-                # Re-raise unexpected errors
-                raise e
-
-    def get_session(self):
-        """Get a new database session."""
-        return self._Session()
-
-    def create_reservation(
-        self,
-        user_id: str,
-        user_name: str,
-        phone_number: str,
-        number_of_guests: int,
-        date_time: datetime,
-        time_created: datetime,
-        time_slot: float = 2.0
-    ) -> Reservation:
-        """Create a new reservation."""
-        session = self.get_session()
-        try:
-            reservation = Reservation(
-                user_id=user_id,
-                user_name=user_name,
-                phone_number=phone_number,
-                number_of_guests=number_of_guests,
-                date_time=date_time,
-                time_slot=time_slot,
-                time_created=time_created,
-                status='confirmed'
-            )
-            session.add(reservation)
-            session.commit()
-            session.refresh(reservation)
-            return reservation
-        except Exception as e:
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def get_reservation_by_id(self, reservation_id: int) -> Reservation:
-        """Get reservation by ID."""
-        session = self.get_session()
-        try:
-            return session.query(Reservation).filter(Reservation.id == reservation_id).first()
-        finally:
-            session.close()
-
-    def get_reservations_by_user(self, user_id: str) -> list:
-        """Get all reservations for a user."""
-        session = self.get_session()
-        try:
-            return session.query(Reservation).filter(
-                Reservation.user_id == user_id,
-                Reservation.status != 'cancelled'
-            ).order_by(Reservation.date_time.desc()).all()
-        finally:
-            session.close()
-
-    def get_reservations_by_date(self, date: datetime) -> list:
-        """Get all reservations for a specific date."""
-        session = self.get_session()
-        try:
-            start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_of_day = date.replace(hour=23, minute=59, second=59, microsecond=999999)
-            return session.query(Reservation).filter(
-                Reservation.date_time >= start_of_day,
-                Reservation.date_time <= end_of_day,
-                Reservation.status == 'confirmed'
-            ).order_by(Reservation.date_time).all()
-        finally:
-            session.close()
-
-    def cancel_reservation(self, reservation_id: int) -> bool:
-        """Cancel a reservation by ID."""
-        session = self.get_session()
-        try:
-            reservation = session.query(Reservation).filter(Reservation.id == reservation_id).first()
-            if reservation:
-                reservation.status = 'cancelled'
-                session.commit()
-                return True
-            return False
-        except Exception as e:
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def update_reservation(
-        self,
-        reservation_id: int,
-        **kwargs
-    ) -> Reservation:
-        """Update a reservation."""
-        session = self.get_session()
-        try:
-            reservation = session.query(Reservation).filter(Reservation.id == reservation_id).first()
-            if reservation:
-                for key, value in kwargs.items():
-                    if hasattr(reservation, key) and value is not None:
-                        setattr(reservation, key, value)
-                session.commit()
-                session.refresh(reservation)
-                return reservation
+            logger.error(f"Error getting session state: {e}")
             return None
-        except Exception as e:
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def get_all_reservations(self, include_cancelled: bool = False) -> list:
-        """Get all reservations."""
-        session = self.get_session()
+    
+    def save_session_state(self, user_id: str, state_json: str) -> bool:
+        '''Save session state JSON for a user.'''
         try:
-            query = session.query(Reservation)
-            if not include_cancelled:
-                query = query.filter(Reservation.status != 'cancelled')
-            return query.order_by(Reservation.date_time.desc()).all()
-        finally:
-            session.close()
+            if self.db_type == 'postgresql':
+                self.cursor.execute('''
+                    INSERT INTO session_states (user_id, state_json, last_updated)
+                    VALUES (%s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id) 
+                    DO UPDATE SET state_json = EXCLUDED.state_json, 
+                                  last_updated = CURRENT_TIMESTAMP
+                ''', (user_id, state_json))
+            else:
+                self.cursor.execute('''
+                    INSERT OR REPLACE INTO session_states (user_id, state_json, last_updated)
+                    VALUES (?, ?, datetime('now'))
+                ''', (user_id, state_json))
+            
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error saving session state: {e}")
+            return False
+    
+    def delete_session_state(self, user_id: str) -> bool:
+        '''Delete session state for a user.'''
+        try:
+            if self.db_type == 'postgresql':
+                self.cursor.execute(
+                    "DELETE FROM session_states WHERE user_id = %s",
+                    (user_id,)
+                )
+            else:
+                self.cursor.execute(
+                    "DELETE FROM session_states WHERE user_id = ?",
+                    (user_id,)
+                )
+            
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting session state: {e}")
+            return False
+    
+    def cleanup_old_sessions(self, hours: int = 24) -> int:
+        '''Delete session states older than specified hours.'''
+        try:
+            if self.db_type == 'postgresql':
+                self.cursor.execute('''
+                    DELETE FROM session_states 
+                    WHERE last_updated < NOW() - INTERVAL '%s hours'
+                ''', (hours,))
+            else:
+                self.cursor.execute('''
+                    DELETE FROM session_states 
+                    WHERE last_updated < datetime('now', '-' || ? || ' hours')
+                ''', (hours,))
+            
+            deleted = self.cursor.rowcount
+            self.conn.commit()
+            return deleted
+        except Exception as e:
+            logger.error(f"Error cleaning up old sessions: {e}")
+            return 0
+"""
+
+# ============================================================================
+# Complete updated init_db() function
+# ============================================================================
+
+UPDATED_INIT_DB = '''
+def init_db(self):
+    """Initialize database tables."""
+    try:
+        # Create reservations table
+        if self.db_type == 'postgresql':
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS reservations (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    user_name TEXT NOT NULL,
+                    phone_number TEXT NOT NULL,
+                    number_of_guests INTEGER NOT NULL,
+                    date_time TIMESTAMP NOT NULL,
+                    time_slot REAL DEFAULT 2.0,
+                    status TEXT DEFAULT 'confirmed',
+                    special_requests TEXT,
+                    time_created TEXT
+                )
+            """)
+            
+            # Create session_states table for multi-worker support
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS session_states (
+                    user_id TEXT PRIMARY KEY,
+                    state_json TEXT NOT NULL,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Create index for faster session lookups
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_states_last_updated 
+                ON session_states(last_updated)
+            """)
+        else:
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS reservations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    user_name TEXT NOT NULL,
+                    phone_number TEXT NOT NULL,
+                    number_of_guests INTEGER NOT NULL,
+                    date_time TEXT NOT NULL,
+                    time_slot REAL DEFAULT 2.0,
+                    status TEXT DEFAULT 'confirmed',
+                    special_requests TEXT,
+                    time_created TEXT
+                )
+            """)
+            
+            # Create session_states table for multi-worker support
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS session_states (
+                    user_id TEXT PRIMARY KEY,
+                    state_json TEXT NOT NULL,
+                    last_updated TEXT DEFAULT (datetime('now'))
+                )
+            """)
+        
+        self.conn.commit()
+        print("Database tables initialized successfully")
+        
+    except Exception as e:
+        print(f"Database tables already exist or error: {e}")
+'''
