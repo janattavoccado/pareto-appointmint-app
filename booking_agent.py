@@ -3,6 +3,9 @@ Restaurant Booking Agent using OpenAI Responses API.
 Handles table reservations with CET:Zagreb timezone support.
 Integrates with knowledge base for restaurant information.
 Integrates with Mem0 for persistent user memory across sessions.
+
+FIXED: Conversation context now properly maintained across messages.
+The user_id is enforced at the tool execution level, not relying on the model.
 """
 
 import json
@@ -826,13 +829,15 @@ def tool_check_availability(date: str) -> str:
 
 # ============================================================================
 # Tool Definitions for Responses API
+# NOTE: We removed user_id from recall_user_info and memory tools because
+# we will inject it automatically at execution time.
 # ============================================================================
 
 TOOLS = [
     {
         "type": "function",
         "name": "get_current_datetime",
-        "description": "Get the current date and time for CET:Zagreb timezone. Call this at the start of each session.",
+        "description": "Get the current date and time for CET:Zagreb timezone. The system automatically provides this - only call if you need to refresh the time.",
         "parameters": {
             "type": "object",
             "properties": {},
@@ -844,16 +849,11 @@ TOOLS = [
     {
         "type": "function",
         "name": "recall_user_info",
-        "description": "Recall what we know about a user from memory. Use this at the start of a conversation to personalize the interaction.",
+        "description": "Recall what we know about the current user from memory. The user_id is automatically set by the system.",
         "parameters": {
             "type": "object",
-            "properties": {
-                "user_id": {
-                    "type": "string",
-                    "description": "The unique identifier for the user (phone number or contact ID)"
-                }
-            },
-            "required": ["user_id"],
+            "properties": {},
+            "required": [],
             "additionalProperties": False
         },
         "strict": True
@@ -861,15 +861,14 @@ TOOLS = [
     {
         "type": "function",
         "name": "remember_user_preference",
-        "description": "Remember a user's preference for future visits. Use when a user mentions dietary restrictions, seating preferences, etc.",
+        "description": "Remember a user's preference for future visits. Use when a user mentions dietary restrictions, seating preferences, etc. The user_id is automatically set by the system.",
         "parameters": {
             "type": "object",
             "properties": {
-                "user_id": {"type": "string", "description": "The unique identifier for the user"},
                 "preference_type": {"type": "string", "enum": ["dietary", "seating", "general"], "description": "Type of preference"},
                 "preference": {"type": "string", "description": "The preference to remember"}
             },
-            "required": ["user_id", "preference_type", "preference"],
+            "required": ["preference_type", "preference"],
             "additionalProperties": False
         },
         "strict": True
@@ -877,14 +876,13 @@ TOOLS = [
     {
         "type": "function",
         "name": "remember_user_name",
-        "description": "Remember a user's name for future interactions.",
+        "description": "Remember a user's name for future interactions. The user_id is automatically set by the system.",
         "parameters": {
             "type": "object",
             "properties": {
-                "user_id": {"type": "string", "description": "The unique identifier for the user"},
                 "name": {"type": "string", "description": "The user's name"}
             },
-            "required": ["user_id", "name"],
+            "required": ["name"],
             "additionalProperties": False
         },
         "strict": True
@@ -892,14 +890,13 @@ TOOLS = [
     {
         "type": "function",
         "name": "search_user_memories",
-        "description": "Search for specific information in a user's memories.",
+        "description": "Search for specific information in the current user's memories. The user_id is automatically set by the system.",
         "parameters": {
             "type": "object",
             "properties": {
-                "user_id": {"type": "string", "description": "The unique identifier for the user"},
                 "query": {"type": "string", "description": "What to search for in the user's memories"}
             },
-            "required": ["user_id", "query"],
+            "required": ["query"],
             "additionalProperties": False
         },
         "strict": True
@@ -993,11 +990,10 @@ TOOLS = [
     {
         "type": "function",
         "name": "create_reservation",
-        "description": "Create a new table reservation. Date supports 'today', 'tomorrow', day names, or YYYY-MM-DD. Time supports 12-hour (7pm) or 24-hour (19:00) formats. Time slot defaults to 2 hours.",
+        "description": "Create a new table reservation. Date supports 'today', 'tomorrow', day names, or YYYY-MM-DD. Time supports 12-hour (7pm) or 24-hour (19:00) formats. Time slot defaults to 2 hours. The user_id is automatically set by the system.",
         "parameters": {
             "type": "object",
             "properties": {
-                "user_id": {"type": "string", "description": "Unique identifier for the user"},
                 "user_name": {"type": "string", "description": "Name of the guest"},
                 "phone_number": {"type": "string", "description": "Contact phone number"},
                 "number_of_guests": {"type": "integer", "description": "Number of guests"},
@@ -1005,7 +1001,7 @@ TOOLS = [
                 "time": {"type": "string", "description": "Time - '7pm', '7:30pm', '19:00', etc."},
                 "time_slot": {"type": "number", "description": "Duration in hours (default 2.0)"}
             },
-            "required": ["user_id", "user_name", "phone_number", "number_of_guests", "date", "time", "time_slot"],
+            "required": ["user_name", "phone_number", "number_of_guests", "date", "time", "time_slot"],
             "additionalProperties": False
         },
         "strict": True
@@ -1027,13 +1023,11 @@ TOOLS = [
     {
         "type": "function",
         "name": "get_user_reservations",
-        "description": "Get all reservations for a specific user.",
+        "description": "Get all reservations for the current user. The user_id is automatically set by the system.",
         "parameters": {
             "type": "object",
-            "properties": {
-                "user_id": {"type": "string", "description": "The user's identifier"}
-            },
-            "required": ["user_id"],
+            "properties": {},
+            "required": [],
             "additionalProperties": False
         },
         "strict": True
@@ -1041,14 +1035,13 @@ TOOLS = [
     {
         "type": "function",
         "name": "cancel_reservation",
-        "description": "Cancel an existing reservation.",
+        "description": "Cancel an existing reservation. The user_id is automatically set by the system for verification.",
         "parameters": {
             "type": "object",
             "properties": {
-                "reservation_id": {"type": "integer", "description": "The reservation ID"},
-                "user_id": {"type": "string", "description": "The user's identifier (for verification)"}
+                "reservation_id": {"type": "integer", "description": "The reservation ID"}
             },
-            "required": ["reservation_id", "user_id"],
+            "required": ["reservation_id"],
             "additionalProperties": False
         },
         "strict": True
@@ -1056,17 +1049,16 @@ TOOLS = [
     {
         "type": "function",
         "name": "update_reservation",
-        "description": "Update an existing reservation (date, time, or number of guests). Pass null for fields you don't want to change.",
+        "description": "Update an existing reservation (date, time, or number of guests). Pass null for fields you don't want to change. The user_id is automatically set by the system for verification.",
         "parameters": {
             "type": "object",
             "properties": {
                 "reservation_id": {"type": "integer", "description": "The reservation ID"},
-                "user_id": {"type": "string", "description": "The user's identifier (for verification)"},
                 "new_date": {"type": ["string", "null"], "description": "New date or null to keep current"},
                 "new_time": {"type": ["string", "null"], "description": "New time or null to keep current"},
                 "new_guests": {"type": ["integer", "null"], "description": "New number of guests or null to keep current"}
             },
-            "required": ["reservation_id", "user_id", "new_date", "new_time", "new_guests"],
+            "required": ["reservation_id", "new_date", "new_time", "new_guests"],
             "additionalProperties": False
         },
         "strict": True
@@ -1089,11 +1081,33 @@ TOOLS = [
 
 
 # ============================================================================
-# Tool Execution
+# Tool Execution with Automatic user_id Injection
 # ============================================================================
 
-def execute_tool(name: str, arguments: Dict[str, Any]) -> Any:
-    """Execute a tool by name with the given arguments."""
+def execute_tool(name: str, arguments: Dict[str, Any], session_user_id: str) -> Any:
+    """
+    Execute a tool by name with the given arguments.
+    
+    IMPORTANT: This function automatically injects the session_user_id for all
+    tools that need it, ensuring the model cannot use incorrect user IDs.
+    """
+    # Tools that need user_id injected
+    user_id_tools = {
+        "recall_user_info",
+        "remember_user_preference",
+        "remember_user_name",
+        "search_user_memories",
+        "create_reservation",
+        "get_user_reservations",
+        "cancel_reservation",
+        "update_reservation"
+    }
+    
+    # Inject user_id for tools that need it
+    if name in user_id_tools:
+        arguments["user_id"] = session_user_id
+        logger.info(f"Injected user_id={session_user_id} for tool {name}")
+    
     tool_map = {
         "get_current_datetime": lambda args: tool_get_current_datetime(),
         "recall_user_info": lambda args: tool_recall_user_info(args["user_id"]),
@@ -1137,8 +1151,13 @@ def execute_tool(name: str, arguments: Dict[str, Any]) -> Any:
 # System Instructions
 # ============================================================================
 
-def get_system_instructions() -> str:
-    """Get the system instructions for the booking agent."""
+def get_system_instructions(datetime_info: Dict[str, Any], user_memory_context: str) -> str:
+    """
+    Get the system instructions for the booking agent.
+    
+    Now includes pre-fetched datetime and user memory context to avoid
+    the model needing to call these tools at the start of every conversation.
+    """
     restaurant_name = kb.get_restaurant_name()
     settings = kb.get_reservation_settings()
     memory_status = "enabled" if memory.is_available else "disabled (MEM0_API_KEY not set)"
@@ -1146,11 +1165,21 @@ def get_system_instructions() -> str:
     return f"""You are a friendly and professional restaurant booking assistant for {restaurant_name}.
 Your role is to help customers make, view, modify, and cancel table reservations, as well as provide information about the restaurant.
 
-IMPORTANT RULES:
-1. At the start of a NEW conversation (first message only), call get_current_datetime and recall_user_info
-2. For FOLLOW-UP messages in the same conversation, DO NOT call these tools again - use the context from previous messages
-3. ALWAYS maintain conversation context - remember what the user said in previous messages
-4. The user_id for this conversation is provided in the system context - ALWAYS use that exact user_id for all tools
+=== CURRENT DATE/TIME (CET:Zagreb) ===
+Date: {datetime_info['current_date']} ({datetime_info['day_of_week']})
+Time: {datetime_info['current_time']}
+Timezone: {datetime_info['timezone']}
+
+=== CURRENT USER INFORMATION ===
+{user_memory_context}
+
+CRITICAL RULES FOR CONVERSATION CONTEXT:
+1. You are in an ONGOING conversation with the user
+2. ALWAYS remember what the user said in previous messages
+3. When the user provides their name and phone number, USE the booking details they already gave you (date, time, guests)
+4. DO NOT ask for information the user has already provided
+5. DO NOT treat each message as a new conversation
+6. The user_id is automatically handled by the system - you don't need to worry about it
 
 Memory System Status: {memory_status}
 
@@ -1168,7 +1197,7 @@ You also have access to a memory system (Mem0) that allows you to:
 
 When helping customers with reservations:
 1. Always be polite and helpful
-2. If this is a returning guest (recall_user_info returns information), greet them by name and acknowledge their preferences
+2. If this is a returning guest (user info shows previous information), greet them by name and acknowledge their preferences
 3. Collect all necessary information: name, phone number, number of guests, preferred date and time
 4. If the user mentions any preferences (dietary, seating, etc.), use remember_user_preference to save them
 5. Confirm all details before making a reservation
@@ -1182,8 +1211,8 @@ Reservation Rules (from knowledge base):
 - {settings.large_party_note}
 
 When a user wants to make a reservation:
-1. First call get_current_datetime to know the current date/time
-2. Call recall_user_info to check for returning guest information
+1. The current date/time is already provided above - no need to call get_current_datetime
+2. The user's memory context is already provided above - no need to call recall_user_info
 3. If returning guest, greet them and pre-fill known information
 4. Ask for any missing information (name, phone, guests, date/time)
 5. Remember any new preferences mentioned
@@ -1200,7 +1229,6 @@ When users ask about the restaurant:
 - Use get_reservation_rules for booking policies
 
 Memory Tools:
-- Use recall_user_info at the start of conversations to personalize the experience
 - Use remember_user_name when a user introduces themselves
 - Use remember_user_preference when users mention dietary restrictions, seating preferences, or other preferences
 - Use search_user_memories to find specific information about a user
@@ -1243,34 +1271,30 @@ def process_booking_message(
         "content": message
     })
     
-    # Build input for the API
-    input_items = []
+    # Pre-fetch datetime and user memory context
+    # This eliminates the need for the model to call these tools
+    datetime_info = tool_get_current_datetime()
     
-    # ALWAYS add context about the user and conversation state at the beginning
-    is_new_conversation = len(conversation_history) == 1
-    context_parts = [f"User ID for this conversation: {user_id}"]
-    
-    if user_name:
-        context_parts.append(f"User's name: {user_name}")
-    if phone_number:
-        context_parts.append(f"User's phone: {phone_number}")
-    
-    if is_new_conversation:
-        context_parts.append("This is the START of a new conversation. Call get_current_datetime and recall_user_info.")
+    # Only fetch user memory on first message to avoid redundant calls
+    is_first_message = len(conversation_history) == 1
+    if is_first_message:
+        user_memory_context = tool_recall_user_info(user_id)
+        logger.info(f"First message - fetched user memory for {user_id}")
     else:
-        context_parts.append(f"This is message #{len(conversation_history)} in an ONGOING conversation. DO NOT call get_current_datetime or recall_user_info again. Use the context from previous messages.")
+        # For follow-up messages, indicate this is a continuation
+        user_memory_context = "This is a follow-up message in an ongoing conversation. Use context from previous messages."
     
-    context_message = {"role": "system", "content": "\n".join(context_parts)}
-    input_items.append(context_message)
+    # Get system instructions with pre-fetched context
+    system_instructions = get_system_instructions(datetime_info, user_memory_context)
     
-    # Add the conversation history
-    input_items.extend(conversation_history)
+    # Build input for the API - just the conversation history
+    input_items = list(conversation_history)
     
     try:
         # Make initial API request
         response = client.responses.create(
             model="gpt-4.1-mini",  # Fast and cost-effective
-            instructions=get_system_instructions(),
+            instructions=system_instructions,
             tools=TOOLS,
             input=input_items
         )
@@ -1296,9 +1320,9 @@ def process_booking_message(
             for call in function_calls:
                 logger.info(f"Executing tool: {call.name} with args: {call.arguments}")
                 
-                # Parse arguments and execute
+                # Parse arguments and execute with automatic user_id injection
                 args = json.loads(call.arguments) if call.arguments else {}
-                result = execute_tool(call.name, args)
+                result = execute_tool(call.name, args, user_id)  # Pass session user_id
                 
                 logger.info(f"Tool {call.name} result: {str(result)[:200]}...")
                 
@@ -1312,7 +1336,7 @@ def process_booking_message(
             # Make next API request with function outputs
             response = client.responses.create(
                 model="gpt-4.1-mini",
-                instructions=get_system_instructions(),
+                instructions=system_instructions,
                 tools=TOOLS,
                 input=input_items
             )
