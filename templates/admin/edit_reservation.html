@@ -1,0 +1,93 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Edit Reservation #{{ reservation.id }}{% endblock %}
+{% block page_title %}Edit Reservation{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0">Edit Reservation #{{ reservation.id }}</h4>
+                <span class="badge badge-{{ reservation.status }} fs-6">
+                    {{ reservation.status|capitalize }}
+                </span>
+            </div>
+            
+            <form method="POST">
+                <div class="row g-3">
+                    <!-- Guest Name -->
+                    <div class="col-md-6">
+                        <label class="form-label">Guest Name <span class="text-danger">*</span></label>
+                        <input type="text" name="user_name" class="form-control" 
+                               value="{{ reservation.user_name }}" required>
+                    </div>
+                    
+                    <!-- Phone Number -->
+                    <div class="col-md-6">
+                        <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+                        <input type="tel" name="phone_number" class="form-control" 
+                               value="{{ reservation.phone_number }}" required>
+                    </div>
+                    
+                    <!-- Date -->
+                    <div class="col-md-4">
+                        <label class="form-label">Date <span class="text-danger">*</span></label>
+                        <input type="date" name="date" class="form-control" 
+                               value="{{ reservation.date_time.strftime('%Y-%m-%d') if reservation.date_time else '' }}" required>
+                    </div>
+                    
+                    <!-- Time -->
+                    <div class="col-md-4">
+                        <label class="form-label">Time <span class="text-danger">*</span></label>
+                        <input type="time" name="time" class="form-control" 
+                               value="{{ reservation.date_time.strftime('%H:%M') if reservation.date_time else '' }}" required>
+                    </div>
+                    
+                    <!-- Number of Guests -->
+                    <div class="col-md-4">
+                        <label class="form-label">Number of Guests <span class="text-danger">*</span></label>
+                        <input type="number" name="number_of_guests" class="form-control" 
+                               value="{{ reservation.number_of_guests }}" min="1" max="50" required>
+                    </div>
+                    
+                    <!-- Status -->
+                    <div class="col-md-6">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="confirmed" {% if reservation.status == 'confirmed' %}selected{% endif %}>
+                                Confirmed
+                            </option>
+                            <option value="completed" {% if reservation.status == 'completed' %}selected{% endif %}>
+                                Completed
+                            </option>
+                            <option value="cancelled" {% if reservation.status == 'cancelled' %}selected{% endif %}>
+                                Cancelled
+                            </option>
+                        </select>
+                    </div>
+                    
+                    <!-- Time Slot Duration -->
+                    <div class="col-md-6">
+                        <label class="form-label">Duration (hours)</label>
+                        <input type="number" name="time_slot" class="form-control" 
+                               value="{{ reservation.time_slot or 2 }}" min="0.5" max="8" step="0.5">
+                    </div>
+                </div>
+                
+                <hr class="my-4">
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('admin.reservation_detail', reservation_id=reservation.id) }}" 
+                       class="btn btn-outline-secondary">
+                        <i class="bi bi-x-lg me-1"></i> Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

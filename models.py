@@ -2,16 +2,18 @@
 Database models for restaurant table reservations.
 Uses SQLAlchemy ORM with support for SQLite (local) and PostgreSQL (Heroku).
 
-Version 3.1: Added SessionState model for multi-worker session persistence.
+Version 4.0: Added AdminUser model for database-based authentication.
 """
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, Text, inspect
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, Text, Boolean, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import os
 import threading
 import logging
+import hashlib
+import secrets
 
 Base = declarative_base()
 
@@ -69,6 +71,55 @@ class SessionState(Base):
 
     def __repr__(self):
         return f"<SessionState(user_id='{self.user_id}', last_updated='{self.last_updated}')>"
+
+
+class AdminUser(Base):
+    """
+    Model for storing admin users with secure password hashing.
+    """
+    __tablename__ = 'admin_users'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=True)
+    password_hash = Column(String(255), nullable=False)
+    salt = Column(String(64), nullable=False)
+    full_name = Column(String(200), nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_superadmin = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<AdminUser(id={self.id}, username='{self.username}')>"
+
+    def set_password(self, password: str):
+        """Hash and set the password with a random salt."""
+        self.salt = secrets.token_hex(32)
+        self.password_hash = self._hash_password(password, self.salt)
+
+    def check_password(self, password: str) -> bool:
+        """Verify the password against the stored hash."""
+        return self.password_hash == self._hash_password(password, self.salt)
+
+    @staticmethod
+    def _hash_password(password: str, salt: str) -> str:
+        """Create a secure hash of the password with salt."""
+        # Using SHA-256 with salt (consider using bcrypt for production)
+        return hashlib.sha256((password + salt).encode()).hexdigest()
+
+    def to_dict(self):
+        """Convert admin user to dictionary (excluding sensitive fields)."""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'full_name': self.full_name,
+            'is_active': self.is_active,
+            'is_superadmin': self.is_superadmin,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
+            'last_login': self.last_login.strftime('%Y-%m-%d %H:%M:%S') if self.last_login else None
+        }
 
 
 def get_database_url():
@@ -147,10 +198,17 @@ class DatabaseManager:
             inspector = inspect(self._engine)
             existing_tables = inspector.get_table_names()
             
-            if 'reservations' not in existing_tables or 'session_states' not in existing_tables:
+            tables_needed = ['reservations', 'session_states', 'admin_users']
+            missing_tables = [t for t in tables_needed if t not in existing_tables]
+            
+            if missing_tables:
                 # Tables don't exist, create them
                 Base.metadata.create_all(self._engine)
-                print("Database tables created successfully")
+                print(f"Database tables created: {missing_tables}")
+                
+                # Create default admin user if admin_users table was just created
+                if 'admin_users' in missing_tables:
+                    self._create_default_admin()
             else:
                 print("Database tables already exist")
         except Exception as e:
@@ -161,6 +219,30 @@ class DatabaseManager:
             else:
                 # Re-raise unexpected errors
                 raise e
+
+    def _create_default_admin(self):
+        """Create a default admin user if none exists."""
+        session = self.get_session()
+        try:
+            existing = session.query(AdminUser).first()
+            if not existing:
+                admin = AdminUser(
+                    username='admin',
+                    email='admin@restaurant.com',
+                    full_name='Default Administrator',
+                    is_active=True,
+                    is_superadmin=True
+                )
+                admin.set_password('admin123')  # Default password - CHANGE THIS!
+                session.add(admin)
+                session.commit()
+                print("Default admin user created (username: admin, password: admin123)")
+                print("WARNING: Please change the default admin password immediately!")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error creating default admin: {e}")
+        finally:
+            session.close()
 
     def get_session(self):
         """Get a new database session."""
@@ -356,5 +438,157 @@ class DatabaseManager:
             session.rollback()
             logger.error(f"Error cleaning up old sessions: {e}")
             return 0
+        finally:
+            session.close()
+
+    # =========================================================================
+    # Admin User Methods
+    # =========================================================================
+
+    def authenticate_admin(self, username: str, password: str) -> AdminUser:
+        """Authenticate an admin user and return the user if successful."""
+        session = self.get_session()
+        try:
+            admin = session.query(AdminUser).filter(
+                AdminUser.username == username,
+                AdminUser.is_active == True
+            ).first()
+            
+            if admin and admin.check_password(password):
+                # Update last login time
+                admin.last_login = datetime.utcnow()
+                session.commit()
+                session.refresh(admin)
+                return admin
+            return None
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error authenticating admin: {e}")
+            return None
+        finally:
+            session.close()
+
+    def get_admin_by_id(self, admin_id: int) -> AdminUser:
+        """Get admin user by ID."""
+        session = self.get_session()
+        try:
+            return session.query(AdminUser).filter(AdminUser.id == admin_id).first()
+        finally:
+            session.close()
+
+    def get_admin_by_username(self, username: str) -> AdminUser:
+        """Get admin user by username."""
+        session = self.get_session()
+        try:
+            return session.query(AdminUser).filter(AdminUser.username == username).first()
+        finally:
+            session.close()
+
+    def get_all_admins(self) -> list:
+        """Get all admin users."""
+        session = self.get_session()
+        try:
+            return session.query(AdminUser).order_by(AdminUser.created_at.desc()).all()
+        finally:
+            session.close()
+
+    def create_admin(
+        self,
+        username: str,
+        password: str,
+        email: str = None,
+        full_name: str = None,
+        is_superadmin: bool = False
+    ) -> AdminUser:
+        """Create a new admin user."""
+        session = self.get_session()
+        try:
+            # Check if username already exists
+            existing = session.query(AdminUser).filter(AdminUser.username == username).first()
+            if existing:
+                raise ValueError(f"Username '{username}' already exists")
+            
+            admin = AdminUser(
+                username=username,
+                email=email,
+                full_name=full_name,
+                is_active=True,
+                is_superadmin=is_superadmin
+            )
+            admin.set_password(password)
+            session.add(admin)
+            session.commit()
+            session.refresh(admin)
+            return admin
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+
+    def update_admin(self, admin_id: int, **kwargs) -> AdminUser:
+        """Update an admin user."""
+        session = self.get_session()
+        try:
+            admin = session.query(AdminUser).filter(AdminUser.id == admin_id).first()
+            if admin:
+                # Handle password separately
+                if 'password' in kwargs and kwargs['password']:
+                    admin.set_password(kwargs.pop('password'))
+                elif 'password' in kwargs:
+                    kwargs.pop('password')  # Remove empty password
+                
+                for key, value in kwargs.items():
+                    if hasattr(admin, key) and value is not None:
+                        setattr(admin, key, value)
+                session.commit()
+                session.refresh(admin)
+                return admin
+            return None
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+
+    def delete_admin(self, admin_id: int) -> bool:
+        """Delete an admin user."""
+        session = self.get_session()
+        try:
+            admin = session.query(AdminUser).filter(AdminUser.id == admin_id).first()
+            if admin:
+                # Prevent deleting the last superadmin
+                if admin.is_superadmin:
+                    superadmin_count = session.query(AdminUser).filter(
+                        AdminUser.is_superadmin == True,
+                        AdminUser.is_active == True
+                    ).count()
+                    if superadmin_count <= 1:
+                        raise ValueError("Cannot delete the last superadmin")
+                
+                session.delete(admin)
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+
+    def change_admin_password(self, admin_id: int, new_password: str) -> bool:
+        """Change an admin user's password."""
+        session = self.get_session()
+        try:
+            admin = session.query(AdminUser).filter(AdminUser.id == admin_id).first()
+            if admin:
+                admin.set_password(new_password)
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error changing admin password: {e}")
+            return False
         finally:
             session.close()

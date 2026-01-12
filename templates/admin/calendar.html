@@ -1,0 +1,164 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Calendar{% endblock %}
+{% block page_title %}Reservation Calendar{% endblock %}
+
+{% block extra_css %}
+<style>
+    #calendar {
+        background: #fff;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .fc-event {
+        cursor: pointer;
+        border: none;
+        padding: 2px 5px;
+    }
+    
+    .fc-daygrid-event {
+        border-radius: 4px;
+    }
+    
+    .fc-toolbar-title {
+        font-size: 1.3rem !important;
+        color: #2c3e50;
+    }
+    
+    .fc-button-primary {
+        background-color: #3498db !important;
+        border-color: #3498db !important;
+    }
+    
+    .fc-button-primary:hover {
+        background-color: #2980b9 !important;
+        border-color: #2980b9 !important;
+    }
+    
+    .fc-button-primary:not(:disabled).fc-button-active {
+        background-color: #2c3e50 !important;
+        border-color: #2c3e50 !important;
+    }
+    
+    /* Event popup modal */
+    .event-modal .modal-header {
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        color: #fff;
+    }
+    
+    .event-modal .modal-header .btn-close {
+        filter: brightness(0) invert(1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="calendar"></div>
+
+<!-- Event Detail Modal -->
+<div class="modal fade event-modal" id="eventModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-calendar-event me-2"></i>
+                    <span id="modalTitle">Reservation Details</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <td class="text-muted" width="120">Guest</td>
+                        <td><strong id="modalGuest"></strong></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Date & Time</td>
+                        <td id="modalDateTime"></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Party Size</td>
+                        <td>
+                            <span class="badge bg-secondary">
+                                <i class="bi bi-people-fill"></i> <span id="modalGuests"></span> guests
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Phone</td>
+                        <td id="modalPhone"></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Status</td>
+                        <td><span id="modalStatus" class="badge"></span></td>
+                    </tr>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" id="modalViewLink" class="btn btn-primary">
+                    <i class="bi bi-eye me-1"></i> View Details
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
+    
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+        },
+        events: '{{ url_for("admin.calendar_events") }}',
+        eventClick: function(info) {
+            var event = info.event;
+            var props = event.extendedProps;
+            
+            // Populate modal
+            document.getElementById('modalTitle').textContent = event.title;
+            document.getElementById('modalGuest').textContent = event.title.split(' (')[0];
+            document.getElementById('modalDateTime').textContent = event.start.toLocaleString();
+            document.getElementById('modalGuests').textContent = props.guests;
+            document.getElementById('modalPhone').innerHTML = '<a href="tel:' + props.phone + '">' + props.phone + '</a>';
+            
+            // Status badge
+            var statusBadge = document.getElementById('modalStatus');
+            statusBadge.textContent = props.status.charAt(0).toUpperCase() + props.status.slice(1);
+            statusBadge.className = 'badge badge-' + props.status;
+            
+            // View link
+            document.getElementById('modalViewLink').href = '/admin/reservations/' + event.id;
+            
+            eventModal.show();
+        },
+        eventDidMount: function(info) {
+            // Add tooltip
+            info.el.title = info.event.title + '\n' + 
+                           'Time: ' + info.event.start.toLocaleTimeString() + '\n' +
+                           'Status: ' + info.event.extendedProps.status;
+        },
+        dayMaxEvents: 3,
+        moreLinkClick: 'popover',
+        nowIndicator: true,
+        businessHours: {
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            startTime: '11:00',
+            endTime: '23:00'
+        }
+    });
+    
+    calendar.render();
+});
+</script>
+{% endblock %}

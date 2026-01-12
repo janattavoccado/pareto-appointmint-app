@@ -1,0 +1,162 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ 'Edit' if admin else 'New' }} Admin User{% endblock %}
+{% block page_title %}{{ 'Edit' if admin else 'New' }} Admin User{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="stat-card">
+            <h4 class="mb-4">
+                <i class="bi bi-{{ 'pencil' if admin else 'person-plus' }} me-2"></i>
+                {{ 'Edit Admin User' if admin else 'Create New Admin User' }}
+            </h4>
+            
+            <form method="POST">
+                <div class="row g-3">
+                    <!-- Username -->
+                    <div class="col-md-6">
+                        <label class="form-label">Username <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text" name="username" class="form-control" 
+                                   value="{{ admin.username if admin else '' }}" 
+                                   required {% if admin %}readonly{% endif %}>
+                        </div>
+                        {% if admin %}
+                        <small class="text-muted">Username cannot be changed</small>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Email -->
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                            <input type="email" name="email" class="form-control" 
+                                   value="{{ admin.email if admin else '' }}"
+                                   placeholder="admin@example.com">
+                        </div>
+                    </div>
+                    
+                    <!-- Full Name -->
+                    <div class="col-12">
+                        <label class="form-label">Full Name</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-card-text"></i></span>
+                            <input type="text" name="full_name" class="form-control" 
+                                   value="{{ admin.full_name if admin else '' }}"
+                                   placeholder="John Doe">
+                        </div>
+                    </div>
+                    
+                    <!-- Password -->
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            Password 
+                            {% if not admin %}<span class="text-danger">*</span>{% endif %}
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                            <input type="password" name="password" class="form-control" 
+                                   id="password"
+                                   {% if not admin %}required{% endif %}
+                                   minlength="6"
+                                   placeholder="{{ 'Leave blank to keep current' if admin else 'Min. 6 characters' }}">
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Confirm Password -->
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            Confirm Password 
+                            {% if not admin %}<span class="text-danger">*</span>{% endif %}
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+                            <input type="password" name="confirm_password" class="form-control" 
+                                   id="confirm_password"
+                                   {% if not admin %}required{% endif %}
+                                   minlength="6"
+                                   placeholder="Repeat password">
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('confirm_password')">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Role & Status -->
+                    <div class="col-12">
+                        <hr class="my-3">
+                        <h6 class="text-muted mb-3">Permissions</h6>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="is_superadmin" 
+                                   id="is_superadmin"
+                                   {% if admin and admin.is_superadmin %}checked{% endif %}>
+                            <label class="form-check-label" for="is_superadmin">
+                                <strong>Super Admin</strong>
+                                <br><small class="text-muted">Can manage other admin users</small>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    {% if admin %}
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="is_active" 
+                                   id="is_active"
+                                   {% if admin.is_active %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active">
+                                <strong>Active</strong>
+                                <br><small class="text-muted">Allow login to dashboard</small>
+                            </label>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <hr class="my-4">
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('admin.admin_users') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-lg me-1"></i> Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> {{ 'Update' if admin else 'Create' }} Admin User
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function togglePassword(fieldId) {
+    var field = document.getElementById(fieldId);
+    if (field.type === 'password') {
+        field.type = 'text';
+    } else {
+        field.type = 'password';
+    }
+}
+
+// Password match validation
+document.querySelector('form').addEventListener('submit', function(e) {
+    var password = document.getElementById('password').value;
+    var confirmPassword = document.getElementById('confirm_password').value;
+    
+    if (password && password !== confirmPassword) {
+        e.preventDefault();
+        alert('Passwords do not match!');
+    }
+});
+</script>
+{% endblock %}

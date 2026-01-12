@@ -1,0 +1,180 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <!-- Today's Reservations -->
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value">{{ stats.today_count }}</div>
+                    <div class="stat-label">Today's Reservations</div>
+                </div>
+                <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                    <i class="bi bi-calendar-day"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Today's Guests -->
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value">{{ stats.today_guests }}</div>
+                    <div class="stat-label">Guests Today</div>
+                </div>
+                <div class="stat-icon bg-success bg-opacity-10 text-success">
+                    <i class="bi bi-people"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- This Week -->
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value">{{ stats.week_count }}</div>
+                    <div class="stat-label">This Week</div>
+                </div>
+                <div class="stat-icon bg-info bg-opacity-10 text-info">
+                    <i class="bi bi-calendar-week"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Total Reservations -->
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-value">{{ stats.total_count }}</div>
+                    <div class="stat-label">Total Reservations</div>
+                </div>
+                <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                    <i class="bi bi-database"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Upcoming Reservations -->
+    <div class="col-lg-8">
+        <div class="table-container">
+            <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Upcoming Reservations</h5>
+                <a href="{{ url_for('admin.reservations') }}" class="btn btn-sm btn-outline-primary">
+                    View All <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Guest</th>
+                            <th>Party Size</th>
+                            <th>Phone</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reservation in upcoming_reservations %}
+                        <tr>
+                            <td>
+                                <strong>{{ reservation.date_time.strftime('%Y-%m-%d') }}</strong><br>
+                                <small class="text-muted">{{ reservation.date_time.strftime('%H:%M') }}</small>
+                            </td>
+                            <td>{{ reservation.user_name }}</td>
+                            <td>
+                                <span class="badge bg-secondary">
+                                    <i class="bi bi-people-fill"></i> {{ reservation.number_of_guests }}
+                                </span>
+                            </td>
+                            <td>{{ reservation.phone_number }}</td>
+                            <td>
+                                <span class="badge badge-{{ reservation.status }}">
+                                    {{ reservation.status|capitalize }}
+                                </span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('admin.reservation_detail', reservation_id=reservation.id) }}" 
+                                   class="btn btn-sm btn-outline-primary btn-action">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{{ url_for('admin.edit_reservation', reservation_id=reservation.id) }}" 
+                                   class="btn btn-sm btn-outline-secondary btn-action">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
+                                No upcoming reservations
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status Summary -->
+    <div class="col-lg-4">
+        <div class="stat-card">
+            <h5 class="mb-4"><i class="bi bi-pie-chart me-2"></i>Reservation Status</h5>
+            
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                    <span><i class="bi bi-check-circle text-success me-2"></i>Confirmed</span>
+                    <strong>{{ stats.confirmed_count }}</strong>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-success" style="width: {{ (stats.confirmed_count / stats.total_count * 100) if stats.total_count > 0 else 0 }}%"></div>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                    <span><i class="bi bi-check-all text-info me-2"></i>Completed</span>
+                    <strong>{{ stats.completed_count }}</strong>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-info" style="width: {{ (stats.completed_count / stats.total_count * 100) if stats.total_count > 0 else 0 }}%"></div>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                    <span><i class="bi bi-x-circle text-danger me-2"></i>Cancelled</span>
+                    <strong>{{ stats.cancelled_count }}</strong>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-danger" style="width: {{ (stats.cancelled_count / stats.total_count * 100) if stats.total_count > 0 else 0 }}%"></div>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <div class="text-center">
+                <a href="{{ url_for('admin.calendar') }}" class="btn btn-outline-primary">
+                    <i class="bi bi-calendar3 me-2"></i>View Calendar
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends "admin/base.html" %}
+
+{% block title %}My Profile{% endblock %}
+{% block page_title %}My Profile{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="stat-card mb-4">
+            <h4 class="mb-4">
+                <i class="bi bi-person-circle me-2"></i>
+                Profile Information
+            </h4>
+            
+            <form method="POST">
+                <div class="row g-3">
+                    <!-- Username (read-only) -->
+                    <div class="col-md-6">
+                        <label class="form-label">Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control" value="{{ admin.username }}" readonly>
+                        </div>
+                        <small class="text-muted">Username cannot be changed</small>
+                    </div>
+                    
+                    <!-- Email -->
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                            <input type="email" name="email" class="form-control" 
+                                   value="{{ admin.email or '' }}"
+                                   placeholder="your@email.com">
+                        </div>
+                    </div>
+                    
+                    <!-- Full Name -->
+                    <div class="col-12">
+                        <label class="form-label">Full Name</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-card-text"></i></span>
+                            <input type="text" name="full_name" class="form-control" 
+                                   value="{{ admin.full_name or '' }}"
+                                   placeholder="Your full name">
+                        </div>
+                    </div>
+                </div>
+                
+                <hr class="my-4">
+                
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Change Password Link -->
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1"><i class="bi bi-key me-2"></i>Password</h5>
+                    <p class="text-muted mb-0">Change your account password</p>
+                </div>
+                <a href="{{ url_for('admin.change_password') }}" class="btn btn-outline-primary">
+                    Change Password
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <!-- Account Info Card -->
+        <div class="stat-card">
+            <h5 class="mb-3"><i class="bi bi-info-circle me-2"></i>Account Info</h5>
+            
+            <table class="table table-borderless table-sm">
+                <tr>
+                    <td class="text-muted">Role</td>
+                    <td>
+                        {% if admin.is_superadmin %}
+                        <span class="badge bg-warning text-dark">Super Admin</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Admin</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Status</td>
+                    <td>
+                        {% if admin.is_active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Created</td>
+                    <td>{{ admin.created_at.strftime('%Y-%m-%d') if admin.created_at else 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted">Last Login</td>
+                    <td>{{ admin.last_login.strftime('%Y-%m-%d %H:%M') if admin.last_login else 'N/A' }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
