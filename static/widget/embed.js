@@ -44,7 +44,7 @@
             textColor: '#ffffff',
             welcomeMessage: 'Hi! I\'m your AI booking assistant. How can I help you today?',
             placeholderText: 'Type your message...',
-            buttonText: '💬',
+            buttonText: '📞',
             headerTitle: 'Table Reservation',
             language: 'en',
             baseUrl: null  // Auto-detected from script src
