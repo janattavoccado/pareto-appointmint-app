@@ -45,6 +45,7 @@
             welcomeMessage: 'Hi! I\'m your AI booking assistant. How can I help you today?',
             placeholderText: 'Type your message...',
             buttonText: '📞',
+            buttonTooltip: 'Our AI booking assistant will help you to make a reservation. Please first select location by clicking the "Book a Table" button under chosen location.',
             headerTitle: 'Table Reservation',
             language: 'en',
             baseUrl: null  // Auto-detected from script src
@@ -151,9 +152,47 @@
                     justify-content: center;
                 }
 
+                .pb-chat-button {
+                    position: relative;
+                }
+
                 .pb-chat-button:hover {
                     transform: scale(1.1);
                     box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+                }
+
+                .pb-chat-button:hover::after {
+                    content: attr(data-tooltip);
+                    position: absolute;
+                    bottom: 70px;
+                    right: 0;
+                    background: #333;
+                    color: #fff;
+                    padding: 12px 16px;
+                    border-radius: 8px;
+                    font-size: 13px;
+                    line-height: 1.4;
+                    width: 280px;
+                    text-align: left;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    z-index: 1000;
+                    opacity: 1;
+                    pointer-events: none;
+                }
+
+                .pb-chat-button:hover::before {
+                    content: '';
+                    position: absolute;
+                    bottom: 62px;
+                    right: 20px;
+                    border: 8px solid transparent;
+                    border-top-color: #333;
+                    z-index: 1000;
+                }
+
+                .pb-chat-button.open::after,
+                .pb-chat-button.open::before {
+                    display: none;
                 }
 
                 .pb-chat-button.open {
@@ -271,7 +310,7 @@
                 }
 
                 .pb-message.voice::before {
-                    content: '🎤 ';
+                    content: '🎙️ ';
                 }
 
                 .pb-typing-indicator {
@@ -452,7 +491,7 @@
                 </div>
                 <div class="pb-chat-input-container">
                     <input type="text" class="pb-chat-input" placeholder="${this._config.placeholderText}" />
-                    <button class="pb-mic-btn" title="Voice message">🎤</button>
+                    <button class="pb-mic-btn" title="Voice message"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></button>
                     <button class="pb-send-btn" title="Send message">➤</button>
                 </div>
                 <div class="pb-powered-by">
@@ -465,6 +504,7 @@
             chatButton.className = 'pb-chat-button';
             chatButton.innerHTML = this._config.buttonText;
             chatButton.setAttribute('aria-label', 'Open chat');
+            chatButton.setAttribute('data-tooltip', this._config.buttonTooltip);
 
             container.appendChild(chatWindow);
             container.appendChild(chatButton);
@@ -711,7 +751,7 @@
             
             // Update UI
             this._elements.micBtn.classList.remove('recording');
-            this._elements.micBtn.innerHTML = '🎤';
+            this._elements.micBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>';
             this._elements.recordingIndicator.classList.remove('active');
             
             // Stop timer
