@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batak Grill - Restaurant Locations</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --batak-green: #8BC34A;
+            --batak-dark: #1a1a1a;
+            --batak-darker: #0d0d0d;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--batak-darker);
+            color: #fff;
+            line-height: 1.6;
+        }
+        
+        /* Header */
+        .header {
+            background-color: var(--batak-dark);
+            padding: 15px 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            border-bottom: 1px solid rgba(139, 195, 74, 0.2);
+        }
+        
+        .logo {
+            height: 50px;
+        }
+        
+        .nav-link {
+            color: var(--batak-green) !important;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 0 15px;
+            transition: opacity 0.3s;
+        }
+        
+        .nav-link:hover {
+            opacity: 0.8;
+        }
+        
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), 
+                        url('/static/images/Batak_3_-1920x1280.jpg') center/cover;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding-top: 80px;
+        }
+        
+        .hero h1 {
+            font-size: 4rem;
+            color: var(--batak-green);
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .hero p {
+            font-size: 1.5rem;
+            color: #ccc;
+            max-width: 600px;
+            margin: 0 auto 30px;
+        }
+        
+        .btn-batak {
+            background-color: var(--batak-green);
+            color: var(--batak-dark);
+            padding: 15px 40px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border: none;
+            border-radius: 0;
+            transition: all 0.3s;
+        }
+        
+        .btn-batak:hover {
+            background-color: #9CCC65;
+            color: var(--batak-dark);
+            transform: translateY(-2px);
+        }
+        
+        /* Section Title */
+        .section-title {
+            color: var(--batak-green);
+            font-size: 2.5rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 50px;
+            position: relative;
+            display: inline-block;
+        }
+        
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            width: 100px;
+            height: 3px;
+            background-color: var(--batak-green);
+        }
+        
+        /* Locations Section */
+        .locations-section {
+            padding: 100px 0;
+            background-color: var(--batak-darker);
+        }
+        
+        .location-card {
+            background-color: var(--batak-dark);
+            border-radius: 0;
+            overflow: hidden;
+            margin-bottom: 30px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .location-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(139, 195, 74, 0.2);
+        }
+        
+        .location-image {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+        }
+        
+        .location-info {
+            padding: 25px;
+        }
+        
+        .location-name {
+            color: var(--batak-green);
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 15px;
+        }
+        
+        .location-detail {
+            color: #aaa;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .location-detail i {
+            color: var(--batak-green);
+            margin-right: 10px;
+            width: 20px;
+        }
+        
+        .btn-book {
+            background-color: transparent;
+            border: 2px solid var(--batak-green);
+            color: var(--batak-green);
+            padding: 10px 25px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 15px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .btn-book:hover {
+            background-color: var(--batak-green);
+            color: var(--batak-dark);
+        }
+        
+        /* Footer */
+        .footer {
+            background-color: var(--batak-dark);
+            padding: 50px 0 30px;
+            border-top: 1px solid rgba(139, 195, 74, 0.2);
+        }
+        
+        .footer-logo {
+            height: 40px;
+            margin-bottom: 20px;
+        }
+        
+        .footer p {
+            color: #666;
+        }
+        
+        .social-links a {
+            color: var(--batak-green);
+            font-size: 1.5rem;
+            margin: 0 10px;
+            transition: opacity 0.3s;
+        }
+        
+        .social-links a:hover {
+            opacity: 0.7;
+        }
+        
+        /* Widget Modal */
+        .booking-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .booking-modal.active {
+            display: flex;
+        }
+        
+        .booking-modal-content {
+            background-color: var(--batak-dark);
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+            position: relative;
+        }
+        
+        .booking-modal-close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 2rem;
+            color: var(--batak-green);
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        
+        .booking-modal-title {
+            color: var(--batak-green);
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        
+        /* Widget Container */
+        .widget-container {
+            min-height: 400px;
+            background-color: #222;
+            border-radius: 5px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .hero p {
+                font-size: 1.2rem;
+            }
+            
+            .section-title {
+                font-size: 1.8rem;
+            }
+            
+            .nav-link {
+                margin: 5px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <nav class="navbar navbar-expand-lg">
+                <a class="navbar-brand" href="#">
+                    <img src="/static/images/logo-batak-2.svg" alt="Batak" class="logo">
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" style="border-color: var(--batak-green);">
+                    <i class="bi bi-list" style="color: var(--batak-green); font-size: 1.5rem;"></i>
+                </button>
+                <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a class="nav-link" href="#locations">Locations</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#about">About</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#contact">Contact</a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1>Batak Grill</h1>
+            <p>Experience the finest grilled specialties at any of our locations across Croatia</p>
+            <a href="#locations" class="btn btn-batak">View Locations</a>
+        </div>
+    </section>
+
+    <!-- Locations Section -->
+    <section id="locations" class="locations-section">
+        <div class="container">
+            <h2 class="section-title">Our Locations</h2>
+            
+            <div class="row">
+                <!-- Location 1: Kajzerica -->
+                <div class="col-lg-6 col-xl-3">
+                    <div class="location-card">
+                        <img src="/static/images/batak-kajzerica.png" alt="Batak Kajzerica" class="location-image">
+                        <div class="location-info">
+                            <h3 class="location-name">Kajzerica</h3>
+                            <div class="location-detail">
+                                <i class="bi bi-geo-alt"></i>
+                                <span>Remetinečka 14, Zagreb</span>
+                            </div>
+                            <div class="location-detail">
+                                <i class="bi bi-telephone"></i>
+                                <span>01 4888 001</span>
+                            </div>
+                            <div class="location-detail">
+                                <i class="bi bi-clock"></i>
+                                <span>Mon-Sun: 10:00 - 23:00</span>
+                            </div>
+                            <button class="btn btn-book" onclick="openBookingWidget('batak_kajzerica')">
+                                <i class="bi bi-calendar-check me-2"></i>Book a Table
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Location 2: Radnička -->
+                <div class="col-lg-6 col-xl-3">
+                    <div class="location-card">
+                        <img src="/static/images/BatakRadnicka-2492.jpg" alt="Batak Radnička" class="location-image">
+                        <div class="location-info">
+                            <h3 class="location-name">Radnička</h3>
+                            <div class="location-detail">
+                                <i class="bi bi-geo-alt"></i>
+                                <span>Radnička cesta 37c, Zagreb</span>
+                            </div>
+                            <div class="location-detail">
+                                <i class="bi bi-telephone"></i>
+                                <span>01 606 1155</span>
+                            </div>
+                            <div class="location-detail">
+                                <i class="bi bi-clock"></i>
+                                <span>Mon-Sun: 10:00 - 23:00</span>
+                            </div>
+                            <button class="btn btn-book" onclick="openBookingWidget('batak_radnicka')">
+                                <i class="bi bi-calendar-check me-2"></i>Book a Table
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Location 3: Kvatrić -->
+                <div class="col-lg-6 col-xl-3">
+                    <div class="location-card">
+                        <img src="/static/images/Batak-Kvatric.png" alt="Batak Kvatrić" class="location-image">
+                        <div class="location-info">
+                            <h3 class="location-name">Kvatrić</h3>
+                            <div class="location-detail">
+                                <i class="bi bi-geo-alt"></i>
+                                <span>Jakova Gotovca 1, Zagreb</span>
+                            </div>
+                            <div class="location-detail">
+                                <i class="bi bi-telephone"></i>
+                                <span>01 4664 331</span>
+                            </div>
+                            <div class="location-detail">
+                                <i class="bi bi-clock"></i>
+                                <span>Mon-Sun: 10:00 - 23:00</span>
+                            </div>
+                            <button class="btn btn-book" onclick="openBookingWidget('batak_kvatric')">
+                                <i class="bi bi-calendar-check me-2"></i>Book a Table
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Location 4: Centar Cvjetni -->
+                <div class="col-lg-6 col-xl-3">
+                    <div class="location-card">
+                        <img src="/static/images/Batak_3_-1920x1280.jpg" alt="Batak Centar Cvjetni" class="location-image">
+                        <div class="location-info">
+                            <h3 class="location-name">Centar Cvjetni</h3>
+                            <div class="location-detail">
+                                <i class="bi bi-geo-alt"></i>
+                                <span>Trg Petra Preradovića 6, Zagreb</span>
+                            </div>
+                            <div class="location-detail">
+                                <i class="bi bi-telephone"></i>
+                                <span>091 462 2334</span>
+                            </div>
+                            <div class="location-detail">
+                                <i class="bi bi-clock"></i>
+                                <span>Mon-Sun: 10:00 - 23:00</span>
+                            </div>
+                            <button class="btn btn-book" onclick="openBookingWidget('batak_centar')">
+                                <i class="bi bi-calendar-check me-2"></i>Book a Table
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="py-5" style="background-color: var(--batak-dark);">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-6">
+                    <h2 class="section-title">About Batak</h2>
+                    <p class="text-light mb-4">
+                        Batak Grill is a beloved Croatian restaurant chain known for its exceptional grilled meats and traditional recipes. With locations across Croatia, we bring the authentic taste of perfectly grilled specialties to every neighborhood.
+                    </p>
+                    <p class="text-light mb-4">
+                        Our commitment to quality ingredients, expert preparation, and warm hospitality has made us a favorite dining destination for families and friends alike.
+                    </p>
+                    <ul class="list-unstyled text-light">
+                        <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i> Premium quality meats</li>
+                        <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i> Traditional Croatian recipes</li>
+                        <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i> Family-friendly atmosphere</li>
+                        <li class="mb-2"><i class="bi bi-check-circle text-success me-2"></i> Online reservations available</li>
+                    </ul>
+                </div>
+                <div class="col-lg-6">
+                    <img src="/static/images/Batak_3_-1920x1280.jpg" alt="Batak Interior" class="img-fluid rounded">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="py-5" style="background-color: var(--batak-darker);">
+        <div class="container text-center">
+            <h2 class="section-title mx-auto" style="display: table;">Contact Us</h2>
+            <p class="text-light mb-4">Have questions? We'd love to hear from you.</p>
+            <div class="row justify-content-center">
+                <div class="col-md-4 mb-4">
+                    <div class="p-4" style="background-color: var(--batak-dark);">
+                        <i class="bi bi-envelope fs-1" style="color: var(--batak-green);"></i>
+                        <h5 class="mt-3 text-light">Email</h5>
+                        <p class="text-muted">info@batak.hr</p>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="p-4" style="background-color: var(--batak-dark);">
+                        <i class="bi bi-globe fs-1" style="color: var(--batak-green);"></i>
+                        <h5 class="mt-3 text-light">Website</h5>
+                        <p class="text-muted">www.batak.hr</p>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="p-4" style="background-color: var(--batak-dark);">
+                        <i class="bi bi-phone fs-1" style="color: var(--batak-green);"></i>
+                        <h5 class="mt-3 text-light">Phone</h5>
+                        <p class="text-muted">See location details</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container text-center">
+            <img src="/static/images/logo-batak-2.svg" alt="Batak" class="footer-logo">
+            <div class="social-links mb-3">
+                <a href="#"><i class="bi bi-facebook"></i></a>
+                <a href="#"><i class="bi bi-instagram"></i></a>
+            </div>
+            <p>&copy; 2026 Batak Grill - Demo Landing Page</p>
+            <p class="small text-muted">Powered by Pareto Booking Assistant</p>
+        </div>
+    </footer>
+
+    <!-- Booking Modal -->
+    <div id="bookingModal" class="booking-modal">
+        <div class="booking-modal-content">
+            <button class="booking-modal-close" onclick="closeBookingWidget()">&times;</button>
+            <h3 class="booking-modal-title" id="modalTitle">Book a Table</h3>
+            <div id="widgetContainer" class="widget-container">
+                <!-- Widget will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Booking Widget Script -->
+    <script>
+        // Location names mapping
+        const locationNames = {
+            'batak_kajzerica': 'Batak Kajzerica',
+            'batak_radnicka': 'Batak Radnička',
+            'batak_kvatric': 'Batak Kvatrić',
+            'batak_centar': 'Batak Centar Cvjetni'
+        };
+        
+        // Current selected location
+        let currentLocation = null;
+        
+        // Open booking widget modal
+        function openBookingWidget(locationId) {
+            currentLocation = locationId;
+            const modal = document.getElementById('bookingModal');
+            const title = document.getElementById('modalTitle');
+            const container = document.getElementById('widgetContainer');
+            
+            // Set title
+            title.textContent = 'Book at ' + locationNames[locationId];
+            
+            // Clear previous widget
+            container.innerHTML = '';
+            
+            // Create widget iframe or embed
+            // Using the Pareto booking widget with unique assistant_id per location
+            const widgetHTML = `
+                <div id="pareto-booking-widget" 
+                     data-assistant-id="${locationId}"
+                     style="width: 100%; min-height: 400px;">
+                </div>
+                <script src="${window.location.origin}/widget/embed.js"><\/script>
+            `;
+            
+            container.innerHTML = widgetHTML;
+            
+            // Initialize widget if ParetoBooking is available
+            if (typeof ParetoBooking !== 'undefined') {
+                ParetoBooking.init({
+                    assistantId: locationId,
+                    container: '#pareto-booking-widget'
+                });
+            }
+            
+            // Show modal
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // Close booking widget modal
+        function closeBookingWidget() {
+            const modal = document.getElementById('bookingModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            currentLocation = null;
+        }
+        
+        // Close modal on outside click
+        document.getElementById('bookingModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeBookingWidget();
+            }
+        });
+        
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeBookingWidget();
+            }
+        });
+        
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

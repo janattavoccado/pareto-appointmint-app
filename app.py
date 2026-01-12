@@ -17,6 +17,10 @@ from openai import OpenAI
 # Import admin dashboard blueprint
 from admin_routes import admin_bp
 
+from batak_routes import batak_bp
+
+
+
 # Load environment variables
 load_dotenv()
 
@@ -41,6 +45,8 @@ CORS(app)
 
 # Register admin dashboard blueprint
 app.register_blueprint(admin_bp, url_prefix='/admin')
+
+app.register_blueprint(batak_bp)
 
 # Initialize database
 db = DatabaseManager.get_instance()
@@ -90,7 +96,7 @@ def index():
     """Render the main chat interface."""
     session_id = get_or_create_session_id()
     restaurant_name = kb.get_restaurant_name()
-    return render_template('index.html', 
+    return render_template('index.html',
                          restaurant_name=restaurant_name,
                          session_id=session_id)
 
@@ -115,7 +121,7 @@ def menu():
 def contact():
     """Render the Contact page."""
     context = get_common_template_context()
-    
+
     # Get operating hours as a dictionary for the template
     hours = kb.get_operating_hours()
     context['operating_hours'] = {
@@ -123,7 +129,7 @@ def contact():
         for day, h in hours.items()
     }
     context['special_notes'] = kb._config.get('operating_hours', {}).get('special_notes', '')
-    
+
     return render_template('contact.html', **context)
 
 
@@ -137,33 +143,33 @@ def chat():
     try:
         data = request.get_json()
         user_message = data.get('message', '').strip()
-        
+
         if not user_message:
             return jsonify({
                 'success': False,
                 'error': 'Message cannot be empty'
             }), 400
-        
+
         # Get session info
         session_id = get_or_create_session_id()
         conversation_history = get_conversation_history()
-        
+
         # Run the booking agent (synchronous - using Responses API)
         agent_response, updated_history = process_booking_message(
             message=user_message,
             user_id=session_id,
             conversation_history=conversation_history
         )
-        
+
         # Save updated conversation history
         save_conversation_history(updated_history)
-        
+
         return jsonify({
             'success': True,
             'response': agent_response,
             'session_id': session_id
         })
-        
+
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
         return jsonify({
@@ -178,7 +184,7 @@ def reset_conversation():
     session['conversation_history'] = []
     session['session_id'] = str(uuid.uuid4())
     session.modified = True
-    
+
     return jsonify({
         'success': True,
         'message': 'Conversation reset successfully',
@@ -199,33 +205,33 @@ def chat_audio():
                 'success': False,
                 'error': 'No audio file provided'
             }), 400
-        
+
         audio_file = request.files['audio']
-        
+
         if audio_file.filename == '':
             return jsonify({
                 'success': False,
                 'error': 'No audio file selected'
             }), 400
-        
+
         # Get session info
         session_id = get_or_create_session_id()
         conversation_history = get_conversation_history()
-        
+
         # Save audio to a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_audio:
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
-        
+
         try:
             # Initialize OpenAI client
             client = OpenAI()
-            
+
             # Supported languages for transcription
             # Whisper will auto-detect the language from this list
             # Croatian (hr) is default, but also supports: English (en), German (de), Italian (it), Spanish (es)
             SUPPORTED_LANGUAGES = ['hr', 'en', 'de', 'it', 'es']
-            
+
             # First, try to transcribe without specifying language (auto-detect)
             # Whisper is very good at detecting language automatically
             with open(temp_audio_path, 'rb') as audio:
@@ -237,40 +243,40 @@ def chat_audio():
                     # If you want to force a specific language, uncomment below:
                     # language="hr"  # Force Croatian
                 )
-            
+
             transcribed_text = transcription.text.strip()
-            
+
             # Log detected language info
             logger.info(f"Audio transcribed (auto-detected language): {transcribed_text}")
-            
+
             if not transcribed_text:
                 return jsonify({
                     'success': False,
                     'error': 'Could not transcribe audio. Please try again or type your message.'
                 }), 400
-            
+
             # Process with booking agent
             agent_response, updated_history = process_booking_message(
                 message=transcribed_text,
                 user_id=session_id,
                 conversation_history=conversation_history
             )
-            
+
             # Save updated conversation history
             save_conversation_history(updated_history)
-            
+
             return jsonify({
                 'success': True,
                 'transcribed_text': transcribed_text,
                 'response': agent_response,
                 'session_id': session_id
             })
-            
+
         finally:
             # Clean up temporary file
             if os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
-        
+
     except Exception as e:
         logger.error(f"Audio chat error: {e}", exc_info=True)
         return jsonify({
@@ -387,7 +393,7 @@ def search_menu():
                 'success': False,
                 'error': 'Search query is required'
             }), 400
-        
+
         results = kb.search_menu(query)
         return jsonify({
             'success': True,
@@ -411,24 +417,24 @@ def chatwoot_webhook():
     """
     Webhook endpoint for Chatwoot integration.
     Handles incoming messages from WhatsApp via Chatwoot.
-    
+
     URL: https://your-app.herokuapp.com/api/chatwoot/webhook
     """
     try:
         payload = request.get_json()
-        
+
         if not payload:
             logger.warning("Empty Chatwoot webhook payload received")
             return jsonify({"error": "Empty payload"}), 400
-        
+
         # Import and use the webhook handler
         from chatwoot_handler import webhook_handler
-        
+
         # Process the webhook
         result = webhook_handler(payload)
-        
+
         return jsonify(result)
-        
+
     except Exception as e:
         logger.error(f"Chatwoot webhook error: {e}", exc_info=True)
         return jsonify({
@@ -461,7 +467,7 @@ def widget_embed_js():
         widget_path = os.path.join(app.static_folder, 'widget', 'embed.js')
         with open(widget_path, 'r') as f:
             js_content = f.read()
-        
+
         response = app.make_response(js_content)
         response.headers['Content-Type'] = 'application/javascript'
         response.headers['Cache-Control'] = 'public, max-age=3600'  # Cache for 1 hour
@@ -475,7 +481,7 @@ def widget_embed_js():
 def widget_chat():
     """
     Handle text messages from the embeddable widget.
-    
+
     Request JSON:
     {
         "assistant_id": "rest_abc123xyz",
@@ -485,24 +491,24 @@ def widget_chat():
     """
     try:
         data = request.get_json()
-        
+
         if not data:
             return jsonify({'success': False, 'error': 'No data provided'}), 400
-        
+
         assistant_id = data.get('assistant_id')
         session_id = data.get('session_id')
         message = data.get('message', '').strip()
-        
+
         if not assistant_id:
             return jsonify({'success': False, 'error': 'assistant_id is required'}), 400
-        
+
         if not message:
             return jsonify({'success': False, 'error': 'message is required'}), 400
-        
+
         # Generate session_id if not provided
         if not session_id:
             session_id = f"widget_{assistant_id}_{uuid.uuid4().hex[:12]}"
-        
+
         # Get or create conversation history for this widget session
         if session_id not in widget_sessions:
             widget_sessions[session_id] = {
@@ -510,30 +516,30 @@ def widget_chat():
                 'history': [],
                 'created_at': datetime.now().isoformat()
             }
-        
+
         conversation_history = widget_sessions[session_id]['history']
-        
+
         # Create user_id from assistant_id and session for tracking
         user_id = f"{assistant_id}:{session_id}"
-        
+
         # Process with booking agent
         agent_response, updated_history = process_booking_message(
             message=message,
             user_id=user_id,
             conversation_history=conversation_history
         )
-        
+
         # Update stored history
         widget_sessions[session_id]['history'] = updated_history
-        
+
         logger.info(f"Widget chat - Assistant: {assistant_id}, Session: {session_id[:20]}..., Message: {message[:50]}...")
-        
+
         return jsonify({
             'success': True,
             'response': agent_response,
             'session_id': session_id
         })
-        
+
     except Exception as e:
         logger.error(f"Widget chat error: {e}", exc_info=True)
         return jsonify({
@@ -547,7 +553,7 @@ def widget_chat_audio():
     """
     Handle audio messages from the embeddable widget.
     Transcribes audio using Whisper and processes with booking agent.
-    
+
     Request (multipart/form-data):
     - audio: audio file (webm)
     - assistant_id: restaurant assistant ID
@@ -558,26 +564,26 @@ def widget_chat_audio():
         assistant_id = request.form.get('assistant_id')
         session_id = request.form.get('session_id')
         audio_file = request.files.get('audio')
-        
+
         if not assistant_id:
             return jsonify({'success': False, 'error': 'assistant_id is required'}), 400
-        
+
         if not audio_file:
             return jsonify({'success': False, 'error': 'No audio file provided'}), 400
-        
+
         # Generate session_id if not provided
         if not session_id:
             session_id = f"widget_{assistant_id}_{uuid.uuid4().hex[:12]}"
-        
+
         # Save audio to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as temp_audio:
             audio_file.save(temp_audio.name)
             temp_audio_path = temp_audio.name
-        
+
         try:
             # Initialize OpenAI client
             client = OpenAI()
-            
+
             # Transcribe audio using Whisper (auto-detect language)
             with open(temp_audio_path, 'rb') as audio:
                 transcription = client.audio.transcriptions.create(
@@ -585,17 +591,17 @@ def widget_chat_audio():
                     file=audio
                     # Auto-detect language (supports: hr, en, de, it, es, etc.)
                 )
-            
+
             transcribed_text = transcription.text.strip()
-            
+
             if not transcribed_text:
                 return jsonify({
                     'success': False,
                     'error': 'Could not transcribe audio'
                 }), 400
-            
+
             logger.info(f"Widget audio transcribed: {transcribed_text}")
-            
+
             # Get or create conversation history
             if session_id not in widget_sessions:
                 widget_sessions[session_id] = {
@@ -603,32 +609,32 @@ def widget_chat_audio():
                     'history': [],
                     'created_at': datetime.now().isoformat()
                 }
-            
+
             conversation_history = widget_sessions[session_id]['history']
             user_id = f"{assistant_id}:{session_id}"
-            
+
             # Process with booking agent
             agent_response, updated_history = process_booking_message(
                 message=transcribed_text,
                 user_id=user_id,
                 conversation_history=conversation_history
             )
-            
+
             # Update stored history
             widget_sessions[session_id]['history'] = updated_history
-            
+
             return jsonify({
                 'success': True,
                 'transcribed_text': transcribed_text,
                 'response': agent_response,
                 'session_id': session_id
             })
-            
+
         finally:
             # Clean up temp file
             if os.path.exists(temp_audio_path):
                 os.remove(temp_audio_path)
-        
+
     except Exception as e:
         logger.error(f"Widget audio error: {e}", exc_info=True)
         return jsonify({
@@ -646,7 +652,7 @@ def widget_config(assistant_id):
     try:
         # For now, return default config with restaurant info from knowledgebase
         restaurant_name = kb.get_restaurant_name()
-        
+
         config = {
             'assistant_id': assistant_id,
             'restaurant_name': restaurant_name,
@@ -658,12 +664,12 @@ def widget_config(assistant_id):
                 'text_input': True
             }
         }
-        
+
         return jsonify({
             'success': True,
             'config': config
         })
-        
+
     except Exception as e:
         logger.error(f"Widget config error: {e}")
         return jsonify({
@@ -728,10 +734,10 @@ if __name__ == '__main__':
     debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     host = os.getenv('FLASK_HOST', '0.0.0.0')
     port = int(os.getenv('PORT', os.getenv('FLASK_PORT', 5000)))
-    
+
     restaurant_name = kb.get_restaurant_name()
     chatwoot_configured = bool(os.getenv('CHATWOOT_API_ACCESS_TOKEN'))
-    
+
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║           Restaurant Booking Agent - Flask Server            ║
@@ -756,5 +762,5 @@ if __name__ == '__main__':
 ║    - Health Check:     /health                               
 ╚══════════════════════════════════════════════════════════════╝
     """)
-    
+
     app.run(host=host, port=port, debug=debug)
