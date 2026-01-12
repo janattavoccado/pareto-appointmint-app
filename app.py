@@ -14,6 +14,9 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from openai import OpenAI
 
+# Import admin dashboard blueprint
+from admin_routes import admin_bp
+
 # Load environment variables
 load_dotenv()
 
@@ -35,6 +38,9 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-product
 
 # Enable CORS for API integrations (e.g., Chatwoot webhook)
 CORS(app)
+
+# Register admin dashboard blueprint
+app.register_blueprint(admin_bp, url_prefix='/admin')
 
 # Initialize database
 db = DatabaseManager.get_instance()
