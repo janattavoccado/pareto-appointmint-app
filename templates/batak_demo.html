@@ -180,6 +180,7 @@
             margin-top: 15px;
             transition: all 0.3s;
             cursor: pointer;
+            width: 100%;
         }
         
         .btn-book:hover {
@@ -214,57 +215,6 @@
             opacity: 0.7;
         }
         
-        /* Widget Modal */
-        .booking-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.9);
-            z-index: 2000;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .booking-modal.active {
-            display: flex;
-        }
-        
-        .booking-modal-content {
-            background-color: var(--batak-dark);
-            padding: 30px;
-            border-radius: 10px;
-            max-width: 500px;
-            width: 90%;
-            position: relative;
-        }
-        
-        .booking-modal-close {
-            position: absolute;
-            top: 10px;
-            right: 15px;
-            font-size: 2rem;
-            color: var(--batak-green);
-            cursor: pointer;
-            background: none;
-            border: none;
-        }
-        
-        .booking-modal-title {
-            color: var(--batak-green);
-            margin-bottom: 20px;
-            text-transform: uppercase;
-        }
-        
-        /* Widget Container */
-        .widget-container {
-            min-height: 400px;
-            background-color: #222;
-            border-radius: 5px;
-        }
-        
         /* Responsive */
         @media (max-width: 768px) {
             .hero h1 {
@@ -282,6 +232,11 @@
             .nav-link {
                 margin: 5px 0;
             }
+        }
+        
+        /* Hide default widget button - we use our own buttons */
+        .pareto-booking-button {
+            display: none !important;
         }
     </style>
 </head>
@@ -346,7 +301,7 @@
                                 <i class="bi bi-clock"></i>
                                 <span>Mon-Sun: 10:00 - 23:00</span>
                             </div>
-                            <button class="btn btn-book" onclick="openBookingWidget('batak_kajzerica')">
+                            <button class="btn btn-book" onclick="openBooking('batak_kajzerica', 'Batak Kajzerica')">
                                 <i class="bi bi-calendar-check me-2"></i>Book a Table
                             </button>
                         </div>
@@ -371,7 +326,7 @@
                                 <i class="bi bi-clock"></i>
                                 <span>Mon-Sun: 10:00 - 23:00</span>
                             </div>
-                            <button class="btn btn-book" onclick="openBookingWidget('batak_radnicka')">
+                            <button class="btn btn-book" onclick="openBooking('batak_radnicka', 'Batak Radnička')">
                                 <i class="bi bi-calendar-check me-2"></i>Book a Table
                             </button>
                         </div>
@@ -396,7 +351,7 @@
                                 <i class="bi bi-clock"></i>
                                 <span>Mon-Sun: 10:00 - 23:00</span>
                             </div>
-                            <button class="btn btn-book" onclick="openBookingWidget('batak_kvatric')">
+                            <button class="btn btn-book" onclick="openBooking('batak_kvatric', 'Batak Kvatrić')">
                                 <i class="bi bi-calendar-check me-2"></i>Book a Table
                             </button>
                         </div>
@@ -421,7 +376,7 @@
                                 <i class="bi bi-clock"></i>
                                 <span>Mon-Sun: 10:00 - 23:00</span>
                             </div>
-                            <button class="btn btn-book" onclick="openBookingWidget('batak_centar')">
+                            <button class="btn btn-book" onclick="openBooking('batak_centar', 'Batak Centar Cvjetni')">
                                 <i class="bi bi-calendar-check me-2"></i>Book a Table
                             </button>
                         </div>
@@ -501,92 +456,44 @@
         </div>
     </footer>
 
-    <!-- Booking Modal -->
-    <div id="bookingModal" class="booking-modal">
-        <div class="booking-modal-content">
-            <button class="booking-modal-close" onclick="closeBookingWidget()">&times;</button>
-            <h3 class="booking-modal-title" id="modalTitle">Book a Table</h3>
-            <div id="widgetContainer" class="widget-container">
-                <!-- Widget will be loaded here -->
-            </div>
-        </div>
-    </div>
-
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Booking Widget Script -->
+    <!-- Pareto Booking Widget -->
+    <script src="https://pareto-appointmint-app-5031fcd0012f.herokuapp.com/widget/embed.js"></script>
+    
     <script>
-        // Location names mapping
-        const locationNames = {
-            'batak_kajzerica': 'Batak Kajzerica',
-            'batak_radnicka': 'Batak Radnička',
-            'batak_kvatric': 'Batak Kvatrić',
-            'batak_centar': 'Batak Centar Cvjetni'
-        };
+        // Track current widget instance
+        let currentWidgetId = null;
         
-        // Current selected location
-        let currentLocation = null;
-        
-        // Open booking widget modal
-        function openBookingWidget(locationId) {
-            currentLocation = locationId;
-            const modal = document.getElementById('bookingModal');
-            const title = document.getElementById('modalTitle');
-            const container = document.getElementById('widgetContainer');
+        // Function to open booking widget for a specific location
+        function openBooking(assistantId, locationName) {
+            // Destroy previous widget if exists
+            if (currentWidgetId && typeof ParetoBooking !== 'undefined' && ParetoBooking.destroy) {
+                ParetoBooking.destroy();
+            }
             
-            // Set title
-            title.textContent = 'Book at ' + locationNames[locationId];
-            
-            // Clear previous widget
-            container.innerHTML = '';
-            
-            // Create widget iframe or embed
-            // Using the Pareto booking widget with unique assistant_id per location
-            const widgetHTML = `
-                <div id="pareto-booking-widget" 
-                     data-assistant-id="${locationId}"
-                     style="width: 100%; min-height: 400px;">
-                </div>
-                <script src="${window.location.origin}/widget/embed.js"><\/script>
-            `;
-            
-            container.innerHTML = widgetHTML;
-            
-            // Initialize widget if ParetoBooking is available
+            // Initialize widget for this location
             if (typeof ParetoBooking !== 'undefined') {
                 ParetoBooking.init({
-                    assistantId: locationId,
-                    container: '#pareto-booking-widget'
+                    assistantId: assistantId,
+                    position: 'bottom-right',
+                    primaryColor: '#8BC34A',  // Batak green
+                    headerTitle: 'Book at ' + locationName,
+                    welcomeMessage: 'Hi! I\'ll help you book a table at ' + locationName + '. When would you like to visit?'
                 });
+                
+                // Open the widget chat
+                if (ParetoBooking.open) {
+                    ParetoBooking.open();
+                }
+                
+                currentWidgetId = assistantId;
+            } else {
+                console.error('ParetoBooking widget not loaded');
+                alert('Booking widget is loading, please try again in a moment.');
             }
-            
-            // Show modal
-            modal.classList.add('active');
-            document.body.style.overflow = 'hidden';
         }
-        
-        // Close booking widget modal
-        function closeBookingWidget() {
-            const modal = document.getElementById('bookingModal');
-            modal.classList.remove('active');
-            document.body.style.overflow = '';
-            currentLocation = null;
-        }
-        
-        // Close modal on outside click
-        document.getElementById('bookingModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeBookingWidget();
-            }
-        });
-        
-        // Close modal on Escape key
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeBookingWidget();
-            }
-        });
         
         // Smooth scroll for anchor links
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
