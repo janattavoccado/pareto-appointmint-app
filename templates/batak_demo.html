@@ -234,9 +234,64 @@
             }
         }
         
-        /* Hide default widget button - we use our own buttons */
+        /* Custom styling for the Pareto widget button */
         .pareto-booking-button {
+            width: 70px !important;
+            height: 70px !important;
+            border-radius: 50% !important;
+            background: linear-gradient(135deg, #8BC34A 0%, #689F38 100%) !important;
+            box-shadow: 0 4px 20px rgba(139, 195, 74, 0.5) !important;
+            animation: pulse-phone 2s infinite !important;
+        }
+        
+        .pareto-booking-button:hover {
+            transform: scale(1.1) !important;
+            box-shadow: 0 6px 30px rgba(139, 195, 74, 0.7) !important;
+        }
+        
+        /* Override the default icon with phone icon */
+        .pareto-booking-button svg,
+        .pareto-booking-button img {
             display: none !important;
+        }
+        
+        .pareto-booking-button::before {
+            content: '\F5B4' !important; /* Bootstrap Icons phone-fill */
+            font-family: 'bootstrap-icons' !important;
+            font-size: 28px !important;
+            color: white !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        /* Pulse animation for attention */
+        @keyframes pulse-phone {
+            0% {
+                box-shadow: 0 0 0 0 rgba(139, 195, 74, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 15px rgba(139, 195, 74, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(139, 195, 74, 0);
+            }
+        }
+        
+        /* Add a label below the button */
+        .pareto-booking-button::after {
+            content: 'Book Now' !important;
+            position: absolute !important;
+            bottom: -25px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+            color: var(--batak-green) !important;
+            white-space: nowrap !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
         }
     </style>
 </head>
