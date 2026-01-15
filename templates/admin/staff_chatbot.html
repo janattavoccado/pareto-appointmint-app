@@ -1,0 +1,580 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Staff Assistant - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h2 mb-1">
+                        <i class="bi bi-headset text-primary me-2"></i>
+                        Staff Assistant
+                    </h1>
+                    <p class="text-muted mb-0">AI-powered reservation management - Use text or voice commands</p>
+                </div>
+                <div>
+                    <button class="btn btn-outline-secondary" onclick="clearChat()">
+                        <i class="bi bi-arrow-clockwise me-1"></i> New Chat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Chat Interface -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm" style="height: calc(100vh - 220px); min-height: 500px;">
+                <!-- Chat Header -->
+                <div class="card-header bg-primary text-white py-3">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle bg-white bg-opacity-25 d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                            <i class="bi bi-robot fs-5"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0">Reservation Assistant</h6>
+                            <small class="opacity-75">Online • Ready to help</small>
+                        </div>
+                        <div class="ms-auto">
+                            <span class="badge bg-success" id="statusBadge">
+                                <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> Connected
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chat Messages -->
+                <div class="card-body p-3" id="chatMessages" style="overflow-y: auto; flex: 1;">
+                    <!-- Welcome Message -->
+                    <div class="d-flex mb-3">
+                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2 flex-shrink-0" style="width: 36px; height: 36px;">
+                            <i class="bi bi-robot"></i>
+                        </div>
+                        <div class="bg-light rounded-3 p-3" style="max-width: 80%;">
+                            <p class="mb-2">👋 Hello! I'm your reservation management assistant. I can help you with:</p>
+                            <ul class="mb-2 ps-3">
+                                <li>View today's reservations</li>
+                                <li>Search for bookings by name or phone</li>
+                                <li>Update reservation status (arrived, seated, completed)</li>
+                                <li>Modify booking details</li>
+                                <li>Get reservation statistics</li>
+                            </ul>
+                            <p class="mb-0 text-muted small">Try saying: "Show today's reservations" or "Mark reservation 5 as arrived"</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Input Area -->
+                <div class="card-footer bg-white border-top p-3">
+                    <!-- Voice Recording Indicator -->
+                    <div class="recording-indicator mb-2 d-none" id="recordingIndicator">
+                        <div class="d-flex align-items-center text-danger">
+                            <div class="recording-pulse me-2"></div>
+                            <span>Recording... <span id="recordingTime">0:00</span></span>
+                            <button class="btn btn-sm btn-outline-danger ms-auto" onclick="stopRecording()">
+                                <i class="bi bi-stop-fill"></i> Stop
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <input type="text" class="form-control form-control-lg" id="messageInput" 
+                               placeholder="Type your message or use voice..." 
+                               onkeypress="handleKeyPress(event)">
+                        <button class="btn btn-outline-secondary" type="button" id="voiceBtn" onclick="toggleRecording()">
+                            <i class="bi bi-mic-fill fs-5" id="micIcon"></i>
+                        </button>
+                        <button class="btn btn-primary px-4" type="button" onclick="sendMessage()">
+                            <i class="bi bi-send-fill"></i>
+                        </button>
+                    </div>
+                    <div class="text-muted small mt-2 text-center">
+                        <i class="bi bi-keyboard me-1"></i> Press Enter to send • 
+                        <i class="bi bi-mic me-1"></i> Click microphone for voice input
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions Sidebar -->
+        <div class="col-lg-4">
+            <!-- Quick Commands -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0 py-3">
+                    <h6 class="mb-0">
+                        <i class="bi bi-lightning-fill text-warning me-2"></i>
+                        Quick Commands
+                    </h6>
+                </div>
+                <div class="card-body p-2">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary text-start" onclick="sendQuickCommand('Show today\\'s reservations')">
+                            <i class="bi bi-calendar-day me-2"></i> Today's Reservations
+                        </button>
+                        <button class="btn btn-outline-primary text-start" onclick="sendQuickCommand('Show upcoming reservations in the next 2 hours')">
+                            <i class="bi bi-clock me-2"></i> Upcoming (2 hours)
+                        </button>
+                        <button class="btn btn-outline-primary text-start" onclick="sendQuickCommand('Show reservation statistics')">
+                            <i class="bi bi-bar-chart me-2"></i> Today's Stats
+                        </button>
+                        <button class="btn btn-outline-primary text-start" onclick="sendQuickCommand('Show pending reservations')">
+                            <i class="bi bi-hourglass-split me-2"></i> Pending Bookings
+                        </button>
+                        <button class="btn btn-outline-primary text-start" onclick="sendQuickCommand('Show confirmed reservations')">
+                            <i class="bi bi-check-circle me-2"></i> Confirmed Bookings
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Status Update Quick Actions -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-0 py-3">
+                    <h6 class="mb-0">
+                        <i class="bi bi-arrow-repeat text-success me-2"></i>
+                        Quick Status Update
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Reservation ID</label>
+                        <input type="number" class="form-control" id="quickResId" placeholder="Enter ID #">
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success btn-sm" onclick="quickStatusUpdate('arrived')">
+                            <i class="bi bi-person-check me-1"></i> Mark Arrived
+                        </button>
+                        <button class="btn btn-info btn-sm text-white" onclick="quickStatusUpdate('seated')">
+                            <i class="bi bi-person-workspace me-1"></i> Mark Seated
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="quickStatusUpdate('completed')">
+                            <i class="bi bi-check-all me-1"></i> Mark Completed
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="quickStatusUpdate('cancelled')">
+                            <i class="bi bi-x-circle me-1"></i> Cancel
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="quickStatusUpdate('no_show')">
+                            <i class="bi bi-person-x me-1"></i> No Show
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Example Commands -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h6 class="mb-0">
+                        <i class="bi bi-chat-quote text-info me-2"></i>
+                        Example Commands
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="small">
+                        <p class="mb-2"><strong>Search:</strong></p>
+                        <ul class="text-muted ps-3 mb-3">
+                            <li>"Find reservation for Jan"</li>
+                            <li>"Search phone 0735488863"</li>
+                        </ul>
+                        
+                        <p class="mb-2"><strong>Update Status:</strong></p>
+                        <ul class="text-muted ps-3 mb-3">
+                            <li>"Mark reservation 8 as arrived"</li>
+                            <li>"Complete booking 12"</li>
+                        </ul>
+                        
+                        <p class="mb-2"><strong>Modify:</strong></p>
+                        <ul class="text-muted ps-3 mb-0">
+                            <li>"Change guests to 5 for reservation 8"</li>
+                            <li>"Update time to 19:30 for booking 12"</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Recording pulse animation */
+    .recording-pulse {
+        width: 12px;
+        height: 12px;
+        background-color: #dc3545;
+        border-radius: 50%;
+        animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.2);
+            opacity: 0.7;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+    
+    /* Voice button recording state */
+    .btn-recording {
+        background-color: #dc3545 !important;
+        border-color: #dc3545 !important;
+        color: white !important;
+        animation: pulse 1s infinite;
+    }
+    
+    /* Message styling */
+    .message-user {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    .message-assistant {
+        background-color: #f8f9fa;
+    }
+    
+    /* Typing indicator */
+    .typing-indicator {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .typing-indicator span {
+        width: 8px;
+        height: 8px;
+        background-color: #6c757d;
+        border-radius: 50%;
+        animation: typing 1.4s infinite;
+    }
+    
+    .typing-indicator span:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    
+    .typing-indicator span:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+    
+    @keyframes typing {
+        0%, 60%, 100% {
+            transform: translateY(0);
+        }
+        30% {
+            transform: translateY(-4px);
+        }
+    }
+    
+    /* Markdown-like formatting in messages */
+    .chat-message strong {
+        font-weight: 600;
+    }
+    
+    .chat-message ul {
+        margin-bottom: 0.5rem;
+    }
+</style>
+
+<script>
+    let isRecording = false;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recordingStartTime = null;
+    let recordingTimer = null;
+    
+    // Session ID for conversation context
+    const sessionId = 'staff_' + Date.now();
+    
+    // Handle Enter key press
+    function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+            sendMessage();
+        }
+    }
+    
+    // Send message to chatbot
+    async function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const message = input.value.trim();
+        
+        if (!message) return;
+        
+        // Add user message to chat
+        addMessage(message, 'user');
+        input.value = '';
+        
+        // Show typing indicator
+        showTypingIndicator();
+        
+        try {
+            const response = await fetch('/admin/staff-chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: message,
+                    session_id: sessionId
+                })
+            });
+            
+            const data = await response.json();
+            
+            // Remove typing indicator
+            hideTypingIndicator();
+            
+            if (data.success) {
+                addMessage(data.response, 'assistant');
+            } else {
+                addMessage('Sorry, I encountered an error. Please try again.', 'assistant');
+            }
+        } catch (error) {
+            hideTypingIndicator();
+            addMessage('Connection error. Please check your connection and try again.', 'assistant');
+            console.error('Error:', error);
+        }
+    }
+    
+    // Add message to chat
+    function addMessage(content, role) {
+        const chatMessages = document.getElementById('chatMessages');
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `d-flex mb-3 ${role === 'user' ? 'justify-content-end' : ''}`;
+        
+        // Format content (convert markdown-like syntax)
+        const formattedContent = formatMessage(content);
+        
+        if (role === 'user') {
+            messageDiv.innerHTML = `
+                <div class="message-user rounded-3 p-3" style="max-width: 80%;">
+                    <p class="mb-0">${formattedContent}</p>
+                </div>
+            `;
+        } else {
+            messageDiv.innerHTML = `
+                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2 flex-shrink-0" style="width: 36px; height: 36px;">
+                    <i class="bi bi-robot"></i>
+                </div>
+                <div class="message-assistant rounded-3 p-3 chat-message" style="max-width: 80%;">
+                    ${formattedContent}
+                </div>
+            `;
+        }
+        
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Format message content
+    function formatMessage(content) {
+        // Convert **bold** to <strong>
+        content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        
+        // Convert newlines to <br>
+        content = content.replace(/\n/g, '<br>');
+        
+        // Convert bullet points
+        content = content.replace(/• /g, '&bull; ');
+        
+        return content;
+    }
+    
+    // Show typing indicator
+    function showTypingIndicator() {
+        const chatMessages = document.getElementById('chatMessages');
+        
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'd-flex mb-3';
+        typingDiv.id = 'typingIndicator';
+        typingDiv.innerHTML = `
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2 flex-shrink-0" style="width: 36px; height: 36px;">
+                <i class="bi bi-robot"></i>
+            </div>
+            <div class="message-assistant rounded-3 p-3">
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        `;
+        
+        chatMessages.appendChild(typingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Hide typing indicator
+    function hideTypingIndicator() {
+        const typingIndicator = document.getElementById('typingIndicator');
+        if (typingIndicator) {
+            typingIndicator.remove();
+        }
+    }
+    
+    // Send quick command
+    function sendQuickCommand(command) {
+        document.getElementById('messageInput').value = command;
+        sendMessage();
+    }
+    
+    // Quick status update
+    function quickStatusUpdate(status) {
+        const resId = document.getElementById('quickResId').value;
+        if (!resId) {
+            alert('Please enter a reservation ID');
+            return;
+        }
+        
+        const statusLabels = {
+            'arrived': 'arrived',
+            'seated': 'seated',
+            'completed': 'completed',
+            'cancelled': 'cancelled',
+            'no_show': 'no show'
+        };
+        
+        const command = `Mark reservation ${resId} as ${statusLabels[status]}`;
+        document.getElementById('messageInput').value = command;
+        document.getElementById('quickResId').value = '';
+        sendMessage();
+    }
+    
+    // Clear chat
+    function clearChat() {
+        const chatMessages = document.getElementById('chatMessages');
+        chatMessages.innerHTML = `
+            <div class="d-flex mb-3">
+                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2 flex-shrink-0" style="width: 36px; height: 36px;">
+                    <i class="bi bi-robot"></i>
+                </div>
+                <div class="bg-light rounded-3 p-3" style="max-width: 80%;">
+                    <p class="mb-2">👋 Hello! I'm your reservation management assistant. How can I help you?</p>
+                    <p class="mb-0 text-muted small">Try: "Show today's reservations" or "Mark reservation 5 as arrived"</p>
+                </div>
+            </div>
+        `;
+        
+        // Clear server-side conversation
+        fetch('/admin/staff-chat/clear', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ session_id: sessionId })
+        });
+    }
+    
+    // Voice Recording Functions
+    async function toggleRecording() {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    }
+    
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            
+            mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
+            };
+            
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                await transcribeAudio(audioBlob);
+                
+                // Stop all tracks
+                stream.getTracks().forEach(track => track.stop());
+            };
+            
+            mediaRecorder.start();
+            isRecording = true;
+            
+            // Update UI
+            document.getElementById('voiceBtn').classList.add('btn-recording');
+            document.getElementById('micIcon').classList.remove('bi-mic-fill');
+            document.getElementById('micIcon').classList.add('bi-stop-fill');
+            document.getElementById('recordingIndicator').classList.remove('d-none');
+            
+            // Start timer
+            recordingStartTime = Date.now();
+            recordingTimer = setInterval(updateRecordingTime, 1000);
+            
+        } catch (error) {
+            console.error('Error accessing microphone:', error);
+            alert('Could not access microphone. Please check permissions.');
+        }
+    }
+    
+    function stopRecording() {
+        if (mediaRecorder && isRecording) {
+            mediaRecorder.stop();
+            isRecording = false;
+            
+            // Update UI
+            document.getElementById('voiceBtn').classList.remove('btn-recording');
+            document.getElementById('micIcon').classList.remove('bi-stop-fill');
+            document.getElementById('micIcon').classList.add('bi-mic-fill');
+            document.getElementById('recordingIndicator').classList.add('d-none');
+            
+            // Stop timer
+            clearInterval(recordingTimer);
+            document.getElementById('recordingTime').textContent = '0:00';
+        }
+    }
+    
+    function updateRecordingTime() {
+        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        document.getElementById('recordingTime').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    async function transcribeAudio(audioBlob) {
+        showTypingIndicator();
+        
+        try {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+            formData.append('session_id', sessionId);
+            
+            const response = await fetch('/admin/staff-chat/voice', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            hideTypingIndicator();
+            
+            if (data.success) {
+                // Show transcribed text
+                if (data.transcription) {
+                    addMessage(data.transcription, 'user');
+                }
+                // Show response
+                addMessage(data.response, 'assistant');
+            } else {
+                addMessage('Sorry, I could not understand the audio. Please try again.', 'assistant');
+            }
+        } catch (error) {
+            hideTypingIndicator();
+            addMessage('Error processing voice input. Please try again.', 'assistant');
+            console.error('Error:', error);
+        }
+    }
+</script>
+{% endblock %}

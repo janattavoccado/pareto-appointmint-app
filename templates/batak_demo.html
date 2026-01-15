@@ -12,20 +12,20 @@
             --batak-dark: #1a1a1a;
             --batak-darker: #0d0d0d;
         }
-
+        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--batak-darker);
             color: #fff;
             line-height: 1.6;
         }
-
+        
         /* Header */
         .header {
             background-color: var(--batak-dark);
@@ -36,11 +36,11 @@
             z-index: 1000;
             border-bottom: 1px solid rgba(139, 195, 74, 0.2);
         }
-
+        
         .logo {
             height: 50px;
         }
-
+        
         .nav-link {
             color: var(--batak-green) !important;
             font-weight: 500;
@@ -49,14 +49,14 @@
             margin: 0 15px;
             transition: opacity 0.3s;
         }
-
+        
         .nav-link:hover {
             opacity: 0.8;
         }
-
+        
         /* Hero Section */
         .hero {
-            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)),
+            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), 
                         url('/static/images/Batak_3_-1920x1280.jpg') center/cover;
             min-height: 100vh;
             display: flex;
@@ -65,7 +65,7 @@
             text-align: center;
             padding-top: 80px;
         }
-
+        
         .hero h1 {
             font-size: 4rem;
             color: var(--batak-green);
@@ -73,14 +73,14 @@
             letter-spacing: 5px;
             margin-bottom: 20px;
         }
-
+        
         .hero p {
             font-size: 1.5rem;
             color: #ccc;
             max-width: 600px;
             margin: 0 auto 30px;
         }
-
+        
         .btn-batak {
             background-color: var(--batak-green);
             color: var(--batak-dark);
@@ -92,13 +92,13 @@
             border-radius: 0;
             transition: all 0.3s;
         }
-
+        
         .btn-batak:hover {
             background-color: #9CCC65;
             color: var(--batak-dark);
             transform: translateY(-2px);
         }
-
+        
         /* Section Title */
         .section-title {
             color: var(--batak-green);
@@ -109,7 +109,7 @@
             position: relative;
             display: inline-block;
         }
-
+        
         .section-title::after {
             content: '';
             position: absolute;
@@ -119,13 +119,13 @@
             height: 3px;
             background-color: var(--batak-green);
         }
-
+        
         /* Locations Section */
         .locations-section {
             padding: 100px 0;
             background-color: var(--batak-darker);
         }
-
+        
         .location-card {
             background-color: var(--batak-dark);
             border-radius: 0;
@@ -133,22 +133,22 @@
             margin-bottom: 30px;
             transition: transform 0.3s, box-shadow 0.3s;
         }
-
+        
         .location-card:hover {
             transform: translateY(-10px);
             box-shadow: 0 20px 40px rgba(139, 195, 74, 0.2);
         }
-
+        
         .location-image {
             width: 100%;
             height: 250px;
             object-fit: cover;
         }
-
+        
         .location-info {
             padding: 25px;
         }
-
+        
         .location-name {
             color: var(--batak-green);
             font-size: 1.5rem;
@@ -156,20 +156,20 @@
             letter-spacing: 2px;
             margin-bottom: 15px;
         }
-
+        
         .location-detail {
             color: #aaa;
             margin-bottom: 8px;
             display: flex;
             align-items: center;
         }
-
+        
         .location-detail i {
             color: var(--batak-green);
             margin-right: 10px;
             width: 20px;
         }
-
+        
         .btn-book {
             background-color: transparent;
             border: 2px solid var(--batak-green);
@@ -182,58 +182,58 @@
             cursor: pointer;
             width: 100%;
         }
-
+        
         .btn-book:hover {
             background-color: var(--batak-green);
             color: var(--batak-dark);
         }
-
+        
         /* Footer */
         .footer {
             background-color: var(--batak-dark);
             padding: 50px 0 30px;
             border-top: 1px solid rgba(139, 195, 74, 0.2);
         }
-
+        
         .footer-logo {
             height: 40px;
             margin-bottom: 20px;
         }
-
+        
         .footer p {
             color: #666;
         }
-
+        
         .social-links a {
             color: var(--batak-green);
             font-size: 1.5rem;
             margin: 0 10px;
             transition: opacity 0.3s;
         }
-
+        
         .social-links a:hover {
             opacity: 0.7;
         }
-
+        
         /* Responsive */
         @media (max-width: 768px) {
             .hero h1 {
                 font-size: 2.5rem;
             }
-
+            
             .hero p {
                 font-size: 1.2rem;
             }
-
+            
             .section-title {
                 font-size: 1.8rem;
             }
-
+            
             .nav-link {
                 margin: 5px 0;
             }
         }
-
+        
         /* Custom styling for the Pareto widget button */
         .pareto-booking-button {
             width: 70px !important;
@@ -243,18 +243,18 @@
             box-shadow: 0 4px 20px rgba(139, 195, 74, 0.5) !important;
             animation: pulse-phone 2s infinite !important;
         }
-
+        
         .pareto-booking-button:hover {
             transform: scale(1.1) !important;
             box-shadow: 0 6px 30px rgba(139, 195, 74, 0.7) !important;
         }
-
+        
         /* Override the default icon with phone icon */
         .pareto-booking-button svg,
         .pareto-booking-button img {
             display: none !important;
         }
-
+        
         .pareto-booking-button::before {
             content: '\F5B4' !important; /* Bootstrap Icons phone-fill */
             font-family: 'bootstrap-icons' !important;
@@ -266,7 +266,7 @@
             width: 100% !important;
             height: 100% !important;
         }
-
+        
         /* Pulse animation for attention */
         @keyframes pulse-phone {
             0% {
@@ -279,7 +279,7 @@
                 box-shadow: 0 0 0 0 rgba(139, 195, 74, 0);
             }
         }
-
+        
         /* Add a label below the button */
         .pareto-booking-button::after {
             content: 'Book Now' !important;
@@ -301,7 +301,7 @@
         <div class="container">
             <nav class="navbar navbar-expand-lg">
                 <a class="navbar-brand" href="#">
-                    <img src="/static/images/batak_demo.png" alt="Batak" class="logo">
+                    <img src="/static/images/logo-batak-2.svg" alt="Batak" class="logo">
                 </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" style="border-color: var(--batak-green);">
                     <i class="bi bi-list" style="color: var(--batak-green); font-size: 1.5rem;"></i>
@@ -336,7 +336,7 @@
     <section id="locations" class="locations-section">
         <div class="container">
             <h2 class="section-title">Our Locations</h2>
-
+            
             <div class="row">
                 <!-- Location 1: Kajzerica -->
                 <div class="col-lg-6 col-xl-3">
@@ -362,7 +362,7 @@
                         </div>
                     </div>
                 </div>
-
+                
                 <!-- Location 2: Radnička -->
                 <div class="col-lg-6 col-xl-3">
                     <div class="location-card">
@@ -387,7 +387,7 @@
                         </div>
                     </div>
                 </div>
-
+                
                 <!-- Location 3: Kvatrić -->
                 <div class="col-lg-6 col-xl-3">
                     <div class="location-card">
@@ -412,7 +412,7 @@
                         </div>
                     </div>
                 </div>
-
+                
                 <!-- Location 4: Centar Cvjetni -->
                 <div class="col-lg-6 col-xl-3">
                     <div class="location-card">
@@ -513,21 +513,21 @@
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
+    
     <!-- Pareto Booking Widget -->
     <script src="https://pareto-appointmint-app-5031fcd0012f.herokuapp.com/widget/embed.js"></script>
-
+    
     <script>
         // Track current widget instance
         let currentWidgetId = null;
-
+        
         // Function to open booking widget for a specific location
         function openBooking(assistantId, locationName) {
             // Destroy previous widget if exists
             if (currentWidgetId && typeof ParetoBooking !== 'undefined' && ParetoBooking.destroy) {
                 ParetoBooking.destroy();
             }
-
+            
             // Initialize widget for this location
             if (typeof ParetoBooking !== 'undefined') {
                 ParetoBooking.init({
@@ -537,19 +537,19 @@
                     headerTitle: 'Book at ' + locationName,
                     welcomeMessage: 'Hi! I\'ll help you book a table at ' + locationName + '. When would you like to visit?'
                 });
-
+                
                 // Open the widget chat
                 if (ParetoBooking.open) {
                     ParetoBooking.open();
                 }
-
+                
                 currentWidgetId = assistantId;
             } else {
                 console.error('ParetoBooking widget not loaded');
                 alert('Booking widget is loading, please try again in a moment.');
             }
         }
-
+        
         // Smooth scroll for anchor links
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function(e) {

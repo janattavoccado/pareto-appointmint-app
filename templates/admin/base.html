@@ -257,6 +257,12 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'admin.staff_assistant' %}active{% endif %}" 
+                   href="{{ url_for('admin.staff_assistant') }}">
+                    <i class="bi bi-headset"></i> Staff Assistant
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link {% if request.endpoint == 'admin.pricing' %}active{% endif %}" 
                    href="{{ url_for('admin.pricing') }}">
                     <i class="bi bi-currency-dollar"></i> Pricing & Plans
