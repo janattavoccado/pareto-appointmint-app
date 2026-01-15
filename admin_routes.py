@@ -638,3 +638,134 @@ def api_stats():
         'confirmed_count': len([r for r in all_reservations if r.status == 'confirmed']),
         'cancelled_count': len([r for r in all_reservations if r.status == 'cancelled'])
     })
+
+
+
+# =============================================================================
+# Staff Assistant Routes
+# =============================================================================
+
+@admin_bp.route('/staff-assistant')
+@admin_required
+def staff_assistant():
+    """Display the staff chatbot interface."""
+    return render_template('admin/staff_chatbot.html')
+
+
+@admin_bp.route('/staff-chat', methods=['POST'])
+@admin_required
+def staff_chat():
+    """Handle staff chatbot text messages."""
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        session_id = data.get('session_id', 'default')
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'No message provided'})
+        
+        # Get the staff chatbot instance
+        from staff_chatbot import get_staff_chatbot
+        db = get_db()
+        chatbot = get_staff_chatbot(db)
+        
+        # Process the message
+        response = chatbot.process_message(session_id, message)
+        
+        return jsonify({
+            'success': True,
+            'response': response
+        })
+        
+    except Exception as e:
+        import logging
+        logging.error(f"Staff chat error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@admin_bp.route('/staff-chat/voice', methods=['POST'])
+@admin_required
+def staff_chat_voice():
+    """Handle staff chatbot voice messages."""
+    try:
+        from openai import OpenAI
+        import tempfile
+        client = OpenAI()
+        
+        # Get the audio file
+        if 'audio' not in request.files:
+            return jsonify({'success': False, 'error': 'No audio file provided'})
+        
+        audio_file = request.files['audio']
+        session_id = request.form.get('session_id', 'default')
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as temp_file:
+            audio_file.save(temp_file.name)
+            temp_path = temp_file.name
+        
+        try:
+            # Transcribe with Whisper
+            with open(temp_path, 'rb') as audio:
+                transcription = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio,
+                    language="en"
+                )
+            
+            transcribed_text = transcription.text
+            
+            if not transcribed_text:
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not transcribe audio'
+                })
+            
+            # Get the staff chatbot instance
+            from staff_chatbot import get_staff_chatbot
+            db = get_db()
+            chatbot = get_staff_chatbot(db)
+            
+            # Process the transcribed message
+            response = chatbot.process_message(session_id, transcribed_text)
+            
+            return jsonify({
+                'success': True,
+                'transcription': transcribed_text,
+                'response': response
+            })
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        
+    except Exception as e:
+        import logging
+        logging.error(f"Staff voice chat error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@admin_bp.route('/staff-chat/clear', methods=['POST'])
+@admin_required
+def staff_chat_clear():
+    """Clear staff chatbot conversation history."""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id', 'default')
+        
+        from staff_chatbot import get_staff_chatbot
+        db = get_db()
+        chatbot = get_staff_chatbot(db)
+        chatbot.clear_conversation(session_id)
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
