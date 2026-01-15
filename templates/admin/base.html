@@ -256,6 +256,12 @@
                     <i class="bi bi-calendar3"></i> Calendar
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'admin.pricing' %}active{% endif %}" 
+                   href="{{ url_for('admin.pricing') }}">
+                    <i class="bi bi-currency-dollar"></i> Pricing & Plans
+                </a>
+            </li>
             
             {% if session.get('is_superadmin') %}
             <li class="nav-section mt-3">Administration</li>

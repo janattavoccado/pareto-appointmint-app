@@ -1,0 +1,467 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Pricing & Usage Plans - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h2 mb-1">
+                        <i class="bi bi-currency-dollar text-success me-2"></i>
+                        Pricing & Usage Plans
+                    </h1>
+                    <p class="text-muted mb-0">AI Booking Assistant pricing based on call volume and entities</p>
+                </div>
+                <div>
+                    <span class="badge bg-success fs-6 px-3 py-2">
+                        <i class="bi bi-check-circle me-1"></i> Active Plan
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="rounded-circle bg-primary bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                        <i class="bi bi-building text-primary fs-4"></i>
+                    </div>
+                    <h5 class="card-title">Entities</h5>
+                    <p class="text-muted small">Number of restaurant locations or booking points using the AI assistant</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="rounded-circle bg-success bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                        <i class="bi bi-telephone text-success fs-4"></i>
+                    </div>
+                    <h5 class="card-title">Calls</h5>
+                    <p class="text-muted small">Monthly AI assistant interactions (voice or chat bookings)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="rounded-circle bg-warning bg-opacity-10 d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                        <i class="bi bi-graph-up-arrow text-warning fs-4"></i>
+                    </div>
+                    <h5 class="card-title">Volume Discount</h5>
+                    <p class="text-muted small">Higher call volumes unlock better per-call rates</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pricing Table -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-table text-primary me-2"></i>
+                        Monthly Pricing (SEK)
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="pricingTable">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th class="py-3 px-4">Number of Entities</th>
+                                    <th class="py-3 px-4 text-center">≤10,000 calls</th>
+                                    <th class="py-3 px-4 text-center">≤20,000 calls</th>
+                                    <th class="py-3 px-4 text-center">≤30,000 calls</th>
+                                    <th class="py-3 px-4 text-center">≤40,000 calls</th>
+                                    <th class="py-3 px-4 text-center">≤50,000 calls</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="py-3 px-4 fw-semibold">
+                                        <span class="badge bg-primary me-2">1-10</span>
+                                        Entities
+                                    </td>
+                                    <td class="py-3 px-4 text-center">1,750 kr</td>
+                                    <td class="py-3 px-4 text-center">1,875 kr</td>
+                                    <td class="py-3 px-4 text-center">2,025 kr</td>
+                                    <td class="py-3 px-4 text-center">2,100 kr</td>
+                                    <td class="py-3 px-4 text-center">2,150 kr</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 fw-semibold">
+                                        <span class="badge bg-success me-2">11-20</span>
+                                        Entities
+                                    </td>
+                                    <td class="py-3 px-4 text-center">2,550 kr</td>
+                                    <td class="py-3 px-4 text-center">2,675 kr</td>
+                                    <td class="py-3 px-4 text-center">2,825 kr</td>
+                                    <td class="py-3 px-4 text-center">2,900 kr</td>
+                                    <td class="py-3 px-4 text-center">2,950 kr</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 fw-semibold">
+                                        <span class="badge bg-warning text-dark me-2">21-30</span>
+                                        Entities
+                                    </td>
+                                    <td class="py-3 px-4 text-center">3,050 kr</td>
+                                    <td class="py-3 px-4 text-center">3,175 kr</td>
+                                    <td class="py-3 px-4 text-center">3,325 kr</td>
+                                    <td class="py-3 px-4 text-center">3,400 kr</td>
+                                    <td class="py-3 px-4 text-center">3,450 kr</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 fw-semibold">
+                                        <span class="badge bg-danger me-2">31-40</span>
+                                        Entities
+                                    </td>
+                                    <td class="py-3 px-4 text-center">3,550 kr</td>
+                                    <td class="py-3 px-4 text-center">3,675 kr</td>
+                                    <td class="py-3 px-4 text-center">3,825 kr</td>
+                                    <td class="py-3 px-4 text-center">3,900 kr</td>
+                                    <td class="py-3 px-4 text-center">3,950 kr</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-light border-0 py-3">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Prices are in Swedish Krona (SEK) per month. Contact us for custom enterprise pricing.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- Bar Chart -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-bar-chart-fill text-primary me-2"></i>
+                        Pricing by Entity Tier & Call Volume
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="pricingBarChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cost Per Call Chart -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-pie-chart-fill text-success me-2"></i>
+                        Cost per Call (at 10k calls)
+                    </h5>
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    <canvas id="costPerCallChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Line Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0">
+                        <i class="bi bi-graph-up text-warning me-2"></i>
+                        Price Progression by Call Volume
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="pricingLineChart" height="120"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calculator Section -->
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div class="card-body text-white p-4">
+                    <h4 class="mb-3">
+                        <i class="bi bi-calculator me-2"></i>
+                        Quick Estimate Calculator
+                    </h4>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Number of Entities</label>
+                            <select class="form-select" id="calcEntities">
+                                <option value="0">1-10 Entities</option>
+                                <option value="1">11-20 Entities</option>
+                                <option value="2">21-30 Entities</option>
+                                <option value="3">31-40 Entities</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Expected Monthly Calls</label>
+                            <select class="form-select" id="calcCalls">
+                                <option value="0">Up to 10,000</option>
+                                <option value="1">Up to 20,000</option>
+                                <option value="2">Up to 30,000</option>
+                                <option value="3">Up to 40,000</option>
+                                <option value="4">Up to 50,000</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-white bg-opacity-20 rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fs-5">Estimated Monthly Cost:</span>
+                            <span class="fs-3 fw-bold" id="estimatedCost">1,750 kr</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body p-4">
+                    <h4 class="mb-3">
+                        <i class="bi bi-question-circle text-primary me-2"></i>
+                        Need a Custom Plan?
+                    </h4>
+                    <p class="text-muted">For enterprise customers with more than 40 entities or 50,000+ monthly calls, we offer custom pricing packages tailored to your needs.</p>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Dedicated support</li>
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Custom integrations</li>
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>SLA guarantees</li>
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Volume discounts</li>
+                    </ul>
+                    <a href="mailto:sales@pareto.ai" class="btn btn-primary">
+                        <i class="bi bi-envelope me-2"></i>Contact Sales
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Pricing data
+    const pricingData = {
+        labels: ['≤10k calls', '≤20k calls', '≤30k calls', '≤40k calls', '≤50k calls'],
+        datasets: [
+            {
+                label: '1-10 Entities',
+                data: [1750, 1875, 2025, 2100, 2150],
+                backgroundColor: 'rgba(13, 110, 253, 0.8)',
+                borderColor: 'rgba(13, 110, 253, 1)',
+                borderWidth: 1
+            },
+            {
+                label: '11-20 Entities',
+                data: [2550, 2675, 2825, 2900, 2950],
+                backgroundColor: 'rgba(25, 135, 84, 0.8)',
+                borderColor: 'rgba(25, 135, 84, 1)',
+                borderWidth: 1
+            },
+            {
+                label: '21-30 Entities',
+                data: [3050, 3175, 3325, 3400, 3450],
+                backgroundColor: 'rgba(255, 193, 7, 0.8)',
+                borderColor: 'rgba(255, 193, 7, 1)',
+                borderWidth: 1
+            },
+            {
+                label: '31-40 Entities',
+                data: [3550, 3675, 3825, 3900, 3950],
+                backgroundColor: 'rgba(220, 53, 69, 0.8)',
+                borderColor: 'rgba(220, 53, 69, 1)',
+                borderWidth: 1
+            }
+        ]
+    };
+
+    // Bar Chart
+    const barCtx = document.getElementById('pricingBarChart').getContext('2d');
+    new Chart(barCtx, {
+        type: 'bar',
+        data: pricingData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.raw.toLocaleString() + ' kr';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString() + ' kr';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Line Chart
+    const lineCtx = document.getElementById('pricingLineChart').getContext('2d');
+    new Chart(lineCtx, {
+        type: 'line',
+        data: {
+            labels: ['≤10k calls', '≤20k calls', '≤30k calls', '≤40k calls', '≤50k calls'],
+            datasets: [
+                {
+                    label: '1-10 Entities',
+                    data: [1750, 1875, 2025, 2100, 2150],
+                    borderColor: 'rgba(13, 110, 253, 1)',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: '11-20 Entities',
+                    data: [2550, 2675, 2825, 2900, 2950],
+                    borderColor: 'rgba(25, 135, 84, 1)',
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: '21-30 Entities',
+                    data: [3050, 3175, 3325, 3400, 3450],
+                    borderColor: 'rgba(255, 193, 7, 1)',
+                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: '31-40 Entities',
+                    data: [3550, 3675, 3825, 3900, 3950],
+                    borderColor: 'rgba(220, 53, 69, 1)',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.raw.toLocaleString() + ' kr';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString() + ' kr';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Doughnut Chart - Cost per call
+    const doughnutCtx = document.getElementById('costPerCallChart').getContext('2d');
+    new Chart(doughnutCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['1-10 Entities', '11-20 Entities', '21-30 Entities', '31-40 Entities'],
+            datasets: [{
+                data: [0.175, 0.255, 0.305, 0.355],
+                backgroundColor: [
+                    'rgba(13, 110, 253, 0.8)',
+                    'rgba(25, 135, 84, 0.8)',
+                    'rgba(255, 193, 7, 0.8)',
+                    'rgba(220, 53, 69, 0.8)'
+                ],
+                borderColor: [
+                    'rgba(13, 110, 253, 1)',
+                    'rgba(25, 135, 84, 1)',
+                    'rgba(255, 193, 7, 1)',
+                    'rgba(220, 53, 69, 1)'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 10,
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.label + ': ' + context.raw.toFixed(3) + ' kr/call';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Calculator
+    const priceMatrix = [
+        [1750, 1875, 2025, 2100, 2150],
+        [2550, 2675, 2825, 2900, 2950],
+        [3050, 3175, 3325, 3400, 3450],
+        [3550, 3675, 3825, 3900, 3950]
+    ];
+
+    function updateEstimate() {
+        const entities = parseInt(document.getElementById('calcEntities').value);
+        const calls = parseInt(document.getElementById('calcCalls').value);
+        const price = priceMatrix[entities][calls];
+        document.getElementById('estimatedCost').textContent = price.toLocaleString() + ' kr';
+    }
+
+    document.getElementById('calcEntities').addEventListener('change', updateEstimate);
+    document.getElementById('calcCalls').addEventListener('change', updateEstimate);
+});
+</script>
+{% endblock %}
