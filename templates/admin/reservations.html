@@ -14,15 +14,19 @@
         <div class="col-md-3">
             <label class="form-label">Status</label>
             <select name="status" class="form-select">
-                <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Status</option>
+                <option value="" {% if not status_filter %}selected{% endif %}>All Status</option>
+                <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
                 <option value="confirmed" {% if status_filter == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                <option value="arrived" {% if status_filter == 'arrived' %}selected{% endif %}>Arrived</option>
+                <option value="seated" {% if status_filter == 'seated' %}selected{% endif %}>Seated</option>
                 <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
                 <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                <option value="no_show" {% if status_filter == 'no_show' %}selected{% endif %}>No Show</option>
             </select>
         </div>
         <div class="col-md-4">
             <label class="form-label">Search</label>
-            <input type="text" name="search" class="form-control" 
+            <input type="text" name="search" class="form-control"
                    placeholder="Name, phone, or ID..." value="{{ search_query or '' }}">
         </div>
         <div class="col-md-2">
@@ -38,14 +42,14 @@
     <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
         <h5 class="mb-0">
             <i class="bi bi-list-ul me-2"></i>
-            All Reservations 
+            All Reservations
             <span class="badge bg-secondary ms-2">{{ reservations|length }}</span>
         </h5>
         <a href="{{ url_for('admin.reservations') }}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-counterclockwise"></i> Reset Filters
         </a>
     </div>
-    
+
     <div class="table-responsive">
         <table class="table table-hover mb-0">
             <thead>
@@ -87,25 +91,26 @@
                     </td>
                     <td>
                         <div class="btn-group">
-                            <a href="{{ url_for('admin.reservation_detail', reservation_id=reservation.id) }}" 
+                            <a href="{{ url_for('admin.reservation_detail', reservation_id=reservation.id) }}"
                                class="btn btn-sm btn-outline-primary" title="View">
                                 <i class="bi bi-eye"></i>
                             </a>
-                            <a href="{{ url_for('admin.edit_reservation', reservation_id=reservation.id) }}" 
+                            <a href="{{ url_for('admin.edit_reservation', reservation_id=reservation.id) }}"
                                class="btn btn-sm btn-outline-secondary" title="Edit">
                                 <i class="bi bi-pencil"></i>
                             </a>
-                            {% if reservation.status == 'confirmed' %}
-                            <form action="{{ url_for('admin.cancel_reservation', reservation_id=reservation.id) }}" 
-                                  method="POST" class="d-inline" 
+                            {% if reservation.status != 'cancelled' %}
+                            <form action="{{ url_for('admin.delete_reservation', reservation_id=reservation.id) }}"
+                                  method="POST" class="d-inline"
                                   onsubmit="return confirm('Are you sure you want to cancel this reservation?');">
                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancel">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
                             </form>
-                            {% elif reservation.status == 'cancelled' %}
-                            <form action="{{ url_for('admin.confirm_reservation', reservation_id=reservation.id) }}" 
+                            {% else %}
+                            <form action="{{ url_for('admin.update_reservation_status', reservation_id=reservation.id) }}"
                                   method="POST" class="d-inline">
+                                <input type="hidden" name="status" value="confirmed">
                                 <button type="submit" class="btn btn-sm btn-outline-success" title="Restore">
                                     <i class="bi bi-arrow-counterclockwise"></i>
                                 </button>
@@ -119,7 +124,7 @@
                     <td colspan="8" class="text-center py-5 text-muted">
                         <i class="bi bi-inbox fs-1 d-block mb-2"></i>
                         No reservations found
-                        {% if date_filter or status_filter != 'all' or search_query %}
+                        {% if date_filter or status_filter or search_query %}
                         <br><small>Try adjusting your filters</small>
                         {% endif %}
                     </td>

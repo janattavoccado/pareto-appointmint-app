@@ -111,7 +111,7 @@
                 </div>
                 <div class="card-body p-2">
                     <div class="d-grid gap-2">
-                        <button class="btn btn-outline-primary text-start" onclick="sendQuickCommand('Show today\\'s reservations')">
+                        <button class="btn btn-outline-primary text-start" onclick="sendQuickCommand('Show today\'s reservations')">
                             <i class="bi bi-calendar-day me-2"></i> Today's Reservations
                         </button>
                         <button class="btn btn-outline-primary text-start" onclick="sendQuickCommand('Show upcoming reservations in the next 2 hours')">
@@ -314,7 +314,7 @@
         showTypingIndicator();
         
         try {
-            const response = await fetch('/admin/staff-chat', {
+            const response = await fetch('/admin/api/staff-chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -330,8 +330,10 @@
             // Remove typing indicator
             hideTypingIndicator();
             
-            if (data.success) {
+            if (data.response) {
                 addMessage(data.response, 'assistant');
+            } else if (data.error) {
+                addMessage('Error: ' + data.error, 'assistant');
             } else {
                 addMessage('Sorry, I encountered an error. Please try again.', 'assistant');
             }
@@ -461,15 +463,6 @@
                 </div>
             </div>
         `;
-        
-        // Clear server-side conversation
-        fetch('/admin/staff-chat/clear', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ session_id: sessionId })
-        });
     }
     
     // Voice Recording Functions
@@ -551,7 +544,7 @@
             formData.append('audio', audioBlob, 'recording.webm');
             formData.append('session_id', sessionId);
             
-            const response = await fetch('/admin/staff-chat/voice', {
+            const response = await fetch('/admin/api/staff-voice', {
                 method: 'POST',
                 body: formData
             });
@@ -560,13 +553,15 @@
             
             hideTypingIndicator();
             
-            if (data.success) {
+            if (data.transcription) {
                 // Show transcribed text
-                if (data.transcription) {
-                    addMessage(data.transcription, 'user');
-                }
+                addMessage(data.transcription, 'user');
                 // Show response
-                addMessage(data.response, 'assistant');
+                if (data.response) {
+                    addMessage(data.response, 'assistant');
+                }
+            } else if (data.error) {
+                addMessage('Error: ' + data.error, 'assistant');
             } else {
                 addMessage('Sorry, I could not understand the audio. Please try again.', 'assistant');
             }
