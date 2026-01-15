@@ -3,75 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Admin Dashboard{% endblock %} - Pareto Restaurant</title>
-    
-    <!-- Bootstrap 5 CSS -->
+    <title>{% block title %}Admin Dashboard{% endblock %} - AppointMint</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <!-- FullCalendar CSS (for calendar view) -->
-    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet">
-    
     <style>
         :root {
-            --sidebar-width: 250px;
-            --primary-color: #2c3e50;
-            --secondary-color: #34495e;
-            --accent-color: #3498db;
+            --primary-color: #2c5530;
+            --primary-light: #3d7a43;
+            --primary-dark: #1e3a21;
+            --accent-color: #c9a227;
+            --bg-dark: #1a1a2e;
+            --bg-card: #16213e;
+            --text-light: #e8e8e8;
+            --text-muted: #a0a0a0;
         }
         
         body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa;
+            min-height: 100vh;
         }
         
-        /* Sidebar */
         .sidebar {
+            background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-dark) 100%);
+            min-height: 100vh;
+            border-right: 1px solid rgba(255,255,255,0.1);
             position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            width: var(--sidebar-width);
-            background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-            padding-top: 0;
+            width: 250px;
             z-index: 1000;
-            transition: all 0.3s;
-            overflow-y: auto;
-        }
-        
-        .sidebar-header {
-            padding: 20px;
-            background: rgba(0,0,0,0.1);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        
-        .sidebar-header h3 {
-            color: #fff;
-            margin: 0;
-            font-size: 1.3rem;
-        }
-        
-        .sidebar-header small {
-            color: rgba(255,255,255,0.6);
         }
         
         .sidebar .nav-link {
-            color: rgba(255,255,255,0.8);
+            color: var(--text-muted);
             padding: 12px 20px;
-            border-left: 3px solid transparent;
-            transition: all 0.2s;
+            margin: 4px 12px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
         }
         
         .sidebar .nav-link:hover {
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            border-left-color: var(--accent-color);
+            color: var(--text-light);
+            background-color: rgba(255,255,255,0.1);
         }
         
         .sidebar .nav-link.active {
-            background: rgba(255,255,255,0.15);
-            color: #fff;
-            border-left-color: var(--accent-color);
+            color: white;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
         }
         
         .sidebar .nav-link i {
@@ -80,293 +58,297 @@
             text-align: center;
         }
         
-        .sidebar .nav-section {
-            padding: 10px 20px 5px;
-            color: rgba(255,255,255,0.4);
-            font-size: 0.75rem;
+        .main-content {
+            margin-left: 250px;
+            padding: 30px;
+            min-height: 100vh;
+        }
+        
+        .navbar-top {
+            background-color: var(--bg-card);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 15px 30px;
+            margin: -30px -30px 30px -30px;
+        }
+        
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+        }
+        
+        .card-header {
+            background-color: transparent;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 15px 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(44, 85, 48, 0.3) 100%);
+            border: 1px solid rgba(44, 85, 48, 0.5);
+            border-radius: 12px;
+            padding: 20px;
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-card .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+        
+        .stat-card .stat-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
         
-        /* Main content */
-        .main-content {
-            margin-left: var(--sidebar-width);
-            padding: 20px 30px;
-            min-height: 100vh;
-        }
-        
-        /* Top bar */
-        .top-bar {
-            background: #fff;
-            padding: 15px 25px;
-            margin: -20px -30px 20px -30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .top-bar h1 {
-            font-size: 1.5rem;
-            margin: 0;
-            color: var(--primary-color);
-        }
-        
-        /* User dropdown */
-        .user-dropdown .dropdown-toggle {
-            background: transparent;
-            border: 1px solid #dee2e6;
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+            border: none;
+            padding: 10px 20px;
             border-radius: 8px;
-            padding: 8px 15px;
-            color: var(--primary-color);
         }
         
-        .user-dropdown .dropdown-toggle:hover {
-            background: #f8f9fa;
+        .btn-primary:hover {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-color) 100%);
         }
         
-        .user-dropdown .dropdown-menu {
-            border-radius: 8px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-        }
-        
-        /* Cards */
-        .stat-card {
-            background: #fff;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            transition: transform 0.2s;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-2px);
-        }
-        
-        .stat-card .stat-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-        }
-        
-        .stat-card .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--primary-color);
-        }
-        
-        .stat-card .stat-label {
-            color: #6c757d;
-            font-size: 0.9rem;
-        }
-        
-        /* Tables */
-        .table-container {
-            background: #fff;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            overflow: hidden;
-        }
-        
-        .table-container .table {
-            margin: 0;
+        .table {
+            color: var(--text-light);
         }
         
         .table thead th {
-            background: #f8f9fa;
-            border-bottom: 2px solid #dee2e6;
+            border-bottom: 2px solid rgba(255,255,255,0.1);
+            color: var(--text-muted);
             font-weight: 600;
-            color: var(--primary-color);
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
         }
         
-        /* Status badges */
+        .table tbody td {
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            vertical-align: middle;
+        }
+        
+        .badge-status {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 500;
+            font-size: 0.75rem;
+        }
+        
         .badge-confirmed {
-            background-color: #28a745;
+            background-color: rgba(40, 167, 69, 0.2);
+            color: #28a745;
+        }
+        
+        .badge-pending {
+            background-color: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
         }
         
         .badge-cancelled {
-            background-color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
         }
         
         .badge-completed {
-            background-color: #17a2b8;
+            background-color: rgba(23, 162, 184, 0.2);
+            color: #17a2b8;
         }
         
-        /* Action buttons */
-        .btn-action {
-            padding: 5px 10px;
-            font-size: 0.85rem;
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            padding: 20px;
         }
         
-        /* Flash messages */
-        .alert-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            max-width: 400px;
+        .logo-text i {
+            margin-right: 10px;
+            color: var(--primary-light);
         }
         
-        /* Responsive */
+        .user-dropdown {
+            color: var(--text-light);
+        }
+        
+        .dropdown-menu {
+            background-color: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .dropdown-item {
+            color: var(--text-light);
+        }
+        
+        .dropdown-item:hover {
+            background-color: rgba(255,255,255,0.1);
+            color: white;
+        }
+        
+        .form-control, .form-select {
+            background-color: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-light);
+        }
+        
+        .form-control:focus, .form-select:focus {
+            background-color: rgba(255,255,255,0.1);
+            border-color: var(--primary-color);
+            color: var(--text-light);
+            box-shadow: 0 0 0 0.2rem rgba(44, 85, 48, 0.25);
+        }
+        
+        .form-control::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .alert {
+            border-radius: 8px;
+        }
+        
+        .modal-content {
+            background-color: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .modal-header {
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .modal-footer {
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .btn-close {
+            filter: invert(1);
+        }
+        
         @media (max-width: 768px) {
             .sidebar {
-                margin-left: calc(-1 * var(--sidebar-width));
+                width: 100%;
+                position: relative;
+                min-height: auto;
             }
-            
-            .sidebar.show {
-                margin-left: 0;
-            }
-            
             .main-content {
                 margin-left: 0;
             }
         }
+        
+        {% block extra_css %}{% endblock %}
     </style>
-    {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- Sidebar -->
-    <nav class="sidebar">
-        <div class="sidebar-header">
-            <h3><i class="bi bi-shop"></i> Pareto</h3>
-            <small>Restaurant Admin</small>
-        </div>
-        
-        <ul class="nav flex-column mt-3">
-            <li class="nav-section">Main</li>
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}" 
-                   href="{{ url_for('admin.dashboard') }}">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'reservation' in request.endpoint and 'admin_' not in request.endpoint %}active{% endif %}" 
-                   href="{{ url_for('admin.reservations') }}">
-                    <i class="bi bi-calendar-check"></i> Reservations
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.calendar' %}active{% endif %}" 
-                   href="{{ url_for('admin.calendar') }}">
-                    <i class="bi bi-calendar3"></i> Calendar
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.staff_assistant' %}active{% endif %}" 
-                   href="{{ url_for('admin.staff_assistant') }}">
-                    <i class="bi bi-headset"></i> Staff Assistant
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.pricing' %}active{% endif %}" 
-                   href="{{ url_for('admin.pricing') }}">
-                    <i class="bi bi-currency-dollar"></i> Pricing & Plans
-                </a>
-            </li>
+    <div class="d-flex">
+        <!-- Sidebar -->
+        <nav class="sidebar d-flex flex-column">
+            <a href="{{ url_for('admin.dashboard') }}" class="logo-text">
+                <i class="bi bi-calendar-check"></i>
+                AppointMint
+            </a>
             
-            {% if session.get('is_superadmin') %}
-            <li class="nav-section mt-3">Administration</li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'admin_user' in request.endpoint or request.endpoint == 'admin.new_admin_user' %}active{% endif %}" 
-                   href="{{ url_for('admin.admin_users') }}">
-                    <i class="bi bi-people"></i> Admin Users
-                </a>
-            </li>
-            {% endif %}
+            <ul class="nav flex-column mt-3">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}" 
+                       href="{{ url_for('admin.dashboard') }}">
+                        <i class="bi bi-speedometer2"></i>
+                        Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.reservations' %}active{% endif %}" 
+                       href="{{ url_for('admin.reservations') }}">
+                        <i class="bi bi-calendar3"></i>
+                        Reservations
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.calendar' %}active{% endif %}" 
+                       href="{{ url_for('admin.calendar') }}">
+                        <i class="bi bi-calendar-week"></i>
+                        Calendar
+                    </a>
+                </li>
+            </ul>
             
-            <li class="nav-section mt-3">Account</li>
-            <li class="nav-item">
-                <a class="nav-link {% if request.endpoint == 'admin.profile' %}active{% endif %}" 
-                   href="{{ url_for('admin.profile') }}">
-                    <i class="bi bi-person-circle"></i> My Profile
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('admin.logout') }}">
-                    <i class="bi bi-box-arrow-left"></i> Logout
-                </a>
-            </li>
-        </ul>
-    </nav>
-    
-    <!-- Main Content -->
-    <main class="main-content">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <h1>{% block page_title %}Dashboard{% endblock %}</h1>
-            <div class="d-flex align-items-center gap-3">
-                <span class="text-muted d-none d-md-inline">
-                    <i class="bi bi-clock"></i> {{ now.strftime('%Y-%m-%d %H:%M') if now else '' }}
-                </span>
-                
-                <!-- User Dropdown -->
-                <div class="dropdown user-dropdown">
-                    <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-person-circle me-1"></i>
-                        {{ session.get('admin_fullname', 'Admin') }}
-                        {% if session.get('is_superadmin') %}
-                        <span class="badge bg-warning text-dark ms-1">Super</span>
-                        {% endif %}
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('admin.profile') }}">
-                                <i class="bi bi-person me-2"></i> My Profile
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item" href="{{ url_for('admin.change_password') }}">
-                                <i class="bi bi-key me-2"></i> Change Password
-                            </a>
-                        </li>
+            <div class="mt-auto p-3">
+                <hr style="border-color: rgba(255,255,255,0.1);">
+                <div class="dropdown">
+                    <a href="#" class="d-flex align-items-center text-decoration-none dropdown-toggle user-dropdown" 
+                       data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-2" style="font-size: 1.5rem;"></i>
+                        <span>{{ session.get('admin_username', 'Admin') }}</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-dark">
+                        <li><a class="dropdown-item" href="{{ url_for('admin.profile') }}">
+                            <i class="bi bi-person me-2"></i>Profile
+                        </a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item text-danger" href="{{ url_for('admin.logout') }}">
-                                <i class="bi bi-box-arrow-left me-2"></i> Logout
-                            </a>
-                        </li>
+                        <li><a class="dropdown-item" href="{{ url_for('admin.logout') }}">
+                            <i class="bi bi-box-arrow-right me-2"></i>Logout
+                        </a></li>
                     </ul>
                 </div>
             </div>
-        </div>
+        </nav>
         
-        <!-- Flash Messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="alert-container">
+        <!-- Main Content -->
+        <main class="main-content flex-grow-1">
+            <!-- Top Navbar -->
+            <div class="navbar-top d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{% block page_title %}Dashboard{% endblock %}</h4>
+                <div class="d-flex align-items-center">
+                    <span class="text-muted me-3">
+                        <i class="bi bi-clock me-1"></i>
+                        <span id="current-time"></span>
+                    </span>
+                </div>
+            </div>
+            
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
                     {% for category, message in messages %}
-                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show" role="alert">
                             {{ message }}
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
-        
-        <!-- Page Content -->
-        {% block content %}{% endblock %}
-    </main>
+                {% endif %}
+            {% endwith %}
+            
+            <!-- Page Content -->
+            {% block content %}{% endblock %}
+        </main>
+    </div>
     
-    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- FullCalendar JS -->
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
-    
     <script>
-        // Auto-hide flash messages after 5 seconds
-        setTimeout(function() {
-            document.querySelectorAll('.alert-container .alert').forEach(function(alert) {
-                new bootstrap.Alert(alert).close();
-            });
-        }, 5000);
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            const options = { 
+                timeZone: 'Europe/Zagreb',
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false
+            };
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('hr-HR', options);
+        }
+        updateTime();
+        setInterval(updateTime, 60000);
     </script>
-    
     {% block extra_js %}{% endblock %}
 </body>
 </html>
