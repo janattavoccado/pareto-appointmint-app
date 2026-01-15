@@ -1,64 +1,37 @@
 """
-Admin Dashboard Routes for Restaurant Booking System
-=====================================================
-
-This module provides admin routes for viewing and managing reservations.
-Uses database-based authentication for admin users.
-
-Usage in app.py:
-    from admin_routes import admin_bp
-    app.register_blueprint(admin_bp, url_prefix='/admin')
+Admin Dashboard Routes - Complete Version
+Includes: Dashboard, Reservations, Calendar, Pricing, Users, Staff Assistant, Profile
 """
 
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session
-from datetime import datetime, timedelta
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from functools import wraps
+from datetime import datetime, timedelta
+import pytz
 import os
+import json
 
-# Create blueprint
-admin_bp = Blueprint('admin', __name__, 
-                     template_folder='templates',
-                     static_folder='static',
-                     static_url_path='/admin/static')
+admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
+# Zagreb timezone
+ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
 
-def get_db():
-    """Get database manager instance."""
-    from models import DatabaseManager
-    return DatabaseManager.get_instance()
-
-
-def admin_required(f):
-    """Decorator for admin authentication."""
+def login_required(f):
+    """Decorator to require admin login"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('admin_logged_in'):
+            flash('Please log in to access the admin dashboard.', 'warning')
             return redirect(url_for('admin.login'))
         return f(*args, **kwargs)
     return decorated_function
 
-
-def superadmin_required(f):
-    """Decorator for superadmin-only routes."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('admin_logged_in'):
-            return redirect(url_for('admin.login'))
-        if not session.get('is_superadmin'):
-            flash('You do not have permission to access this page', 'error')
-            return redirect(url_for('admin.dashboard'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-# =============================================================================
-# Authentication Routes
-# =============================================================================
+# ============================================================================
+# AUTHENTICATION ROUTES
+# ============================================================================
 
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Admin login page with database authentication."""
-    # If already logged in, redirect to dashboard
+    """Admin login page"""
     if session.get('admin_logged_in'):
         return redirect(url_for('admin.dashboard'))
     
@@ -66,706 +39,493 @@ def login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         
-        if not username or not password:
-            flash('Please enter both username and password', 'error')
-            return render_template('admin/login.html')
+        from models import AdminUser
+        user = AdminUser.authenticate(username, password)
         
-        db = get_db()
-        admin = db.authenticate_admin(username, password)
-        
-        if admin:
+        if user:
             session['admin_logged_in'] = True
-            session['admin_id'] = admin.id
-            session['admin_username'] = admin.username
-            session['admin_fullname'] = admin.full_name or admin.username
-            session['is_superadmin'] = admin.is_superadmin
-            
-            flash(f'Welcome back, {admin.full_name or admin.username}!', 'success')
+            session['admin_user_id'] = user.id
+            session['admin_username'] = user.username
+            session['admin_role'] = user.role
+            flash(f'Welcome back, {user.username}!', 'success')
             return redirect(url_for('admin.dashboard'))
         else:
-            flash('Invalid username or password', 'error')
+            flash('Invalid username or password.', 'danger')
     
     return render_template('admin/login.html')
 
-
 @admin_bp.route('/logout')
 def logout():
-    """Admin logout."""
+    """Admin logout"""
     session.pop('admin_logged_in', None)
-    session.pop('admin_id', None)
+    session.pop('admin_user_id', None)
     session.pop('admin_username', None)
-    session.pop('admin_fullname', None)
-    session.pop('is_superadmin', None)
-    flash('You have been logged out', 'info')
+    session.pop('admin_role', None)
+    flash('You have been logged out.', 'info')
     return redirect(url_for('admin.login'))
 
-
-# =============================================================================
-# Dashboard Routes
-# =============================================================================
+# ============================================================================
+# DASHBOARD
+# ============================================================================
 
 @admin_bp.route('/')
-@admin_bp.route('/dashboard')
-@admin_required
+@login_required
 def dashboard():
-    """Main admin dashboard with overview stats."""
-    db = get_db()
+    """Main admin dashboard with statistics"""
+    from models import Reservation
     
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow = today + timedelta(days=1)
-    week_end = today + timedelta(days=7)
+    now = datetime.now(ZAGREB_TZ)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # Get all reservations
-    all_reservations = db.get_all_reservations(include_cancelled=True)
+    # Get statistics
+    stats = Reservation.get_stats()
     
-    # Calculate stats
-    today_reservations = [r for r in all_reservations 
-                         if r.date_time and today <= r.date_time < tomorrow and r.status == 'confirmed']
+    # Get today's reservations
+    today_reservations = Reservation.get_by_date(now.date())
     
-    upcoming_reservations = [r for r in all_reservations 
-                            if r.date_time and r.date_time >= datetime.now() and r.status == 'confirmed']
-    upcoming_reservations = sorted(upcoming_reservations, key=lambda x: x.date_time)[:10]
+    # Get upcoming reservations (next 7 days)
+    upcoming = Reservation.get_upcoming(days=7, limit=10)
     
-    week_reservations = [r for r in all_reservations 
-                        if r.date_time and today <= r.date_time < week_end and r.status == 'confirmed']
-    
-    # Count by status
-    confirmed_count = len([r for r in all_reservations if r.status == 'confirmed'])
-    cancelled_count = len([r for r in all_reservations if r.status == 'cancelled'])
-    completed_count = len([r for r in all_reservations if r.status == 'completed'])
-    
-    # Total guests today
-    total_guests_today = sum(r.number_of_guests for r in today_reservations)
-    
-    stats = {
-        'today_count': len(today_reservations),
-        'today_guests': total_guests_today,
-        'week_count': len(week_reservations),
-        'total_count': len(all_reservations),
-        'confirmed_count': confirmed_count,
-        'cancelled_count': cancelled_count,
-        'completed_count': completed_count
-    }
-    
-    return render_template('admin/dashboard.html', 
-                          stats=stats, 
-                          upcoming_reservations=upcoming_reservations,
-                          today=today,
-                          now=datetime.now())
+    return render_template('admin/dashboard.html',
+                         stats=stats,
+                         today_reservations=today_reservations,
+                         upcoming_reservations=upcoming,
+                         current_time=now)
 
-
-# =============================================================================
-# Reservations Management Routes
-# =============================================================================
+# ============================================================================
+# RESERVATIONS MANAGEMENT
+# ============================================================================
 
 @admin_bp.route('/reservations')
-@admin_required
+@login_required
 def reservations():
-    """View all reservations with filtering."""
-    db = get_db()
+    """List all reservations with filtering"""
+    from models import Reservation
     
     # Get filter parameters
-    date_filter = request.args.get('date')
-    status_filter = request.args.get('status', 'all')
+    status_filter = request.args.get('status', '')
+    date_filter = request.args.get('date', '')
     search_query = request.args.get('search', '')
     
-    # Get all reservations
-    all_reservations = db.get_all_reservations(include_cancelled=True)
-    
-    # Apply filters
-    filtered = all_reservations
-    
-    if date_filter:
-        try:
-            filter_date = datetime.strptime(date_filter, '%Y-%m-%d')
-            next_day = filter_date + timedelta(days=1)
-            filtered = [r for r in filtered if r.date_time and filter_date <= r.date_time < next_day]
-        except ValueError:
-            pass
-    
-    if status_filter and status_filter != 'all':
-        filtered = [r for r in filtered if r.status == status_filter]
-    
+    # Build query
     if search_query:
-        search_lower = search_query.lower()
-        filtered = [r for r in filtered if 
-                   search_lower in r.user_name.lower() or 
-                   search_lower in r.phone_number.lower() or
-                   search_lower in str(r.id)]
+        reservations_list = Reservation.search(search_query)
+    elif date_filter:
+        try:
+            filter_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
+            reservations_list = Reservation.get_by_date(filter_date)
+        except ValueError:
+            reservations_list = Reservation.get_all()
+    elif status_filter:
+        reservations_list = Reservation.get_by_status(status_filter)
+    else:
+        reservations_list = Reservation.get_all()
     
-    # Sort by date (newest first)
-    filtered = sorted(filtered, key=lambda x: x.date_time if x.date_time else datetime.min, reverse=True)
-    
-    return render_template('admin/reservations.html', 
-                          reservations=filtered,
-                          date_filter=date_filter,
-                          status_filter=status_filter,
-                          search_query=search_query,
-                          now=datetime.now())
-
+    return render_template('admin/reservations.html',
+                         reservations=reservations_list,
+                         status_filter=status_filter,
+                         date_filter=date_filter,
+                         search_query=search_query)
 
 @admin_bp.route('/reservations/<int:reservation_id>')
-@admin_required
+@login_required
 def reservation_detail(reservation_id):
-    """View single reservation details."""
-    db = get_db()
-    reservation = db.get_reservation_by_id(reservation_id)
+    """View single reservation details"""
+    from models import Reservation
     
+    reservation = Reservation.get_by_id(reservation_id)
     if not reservation:
-        flash('Reservation not found', 'error')
+        flash('Reservation not found.', 'danger')
         return redirect(url_for('admin.reservations'))
     
-    return render_template('admin/reservation_detail.html', reservation=reservation, now=datetime.now())
+    return render_template('admin/reservation_detail.html', reservation=reservation)
 
+@admin_bp.route('/reservations/<int:reservation_id>/update-status', methods=['POST'])
+@login_required
+def update_reservation_status(reservation_id):
+    """Update reservation status"""
+    from models import Reservation
+    
+    new_status = request.form.get('status')
+    if new_status not in ['pending', 'confirmed', 'cancelled', 'completed', 'no-show']:
+        flash('Invalid status.', 'danger')
+        return redirect(url_for('admin.reservations'))
+    
+    reservation = Reservation.get_by_id(reservation_id)
+    if reservation:
+        reservation.update_status(new_status)
+        flash(f'Reservation status updated to {new_status}.', 'success')
+    else:
+        flash('Reservation not found.', 'danger')
+    
+    return redirect(url_for('admin.reservations'))
 
 @admin_bp.route('/reservations/<int:reservation_id>/edit', methods=['GET', 'POST'])
-@admin_required
+@login_required
 def edit_reservation(reservation_id):
-    """Edit a reservation."""
-    db = get_db()
-    reservation = db.get_reservation_by_id(reservation_id)
+    """Edit reservation details"""
+    from models import Reservation
     
+    reservation = Reservation.get_by_id(reservation_id)
     if not reservation:
-        flash('Reservation not found', 'error')
+        flash('Reservation not found.', 'danger')
         return redirect(url_for('admin.reservations'))
     
     if request.method == 'POST':
-        try:
-            # Parse form data
-            date_str = request.form.get('date')
-            time_str = request.form.get('time')
-            date_time = datetime.strptime(f"{date_str} {time_str}", '%Y-%m-%d %H:%M')
-            
-            # Update reservation
-            db.update_reservation(
-                reservation_id,
-                user_name=request.form.get('user_name'),
-                phone_number=request.form.get('phone_number'),
-                number_of_guests=int(request.form.get('number_of_guests')),
-                date_time=date_time,
-                status=request.form.get('status')
-            )
-            
-            flash('Reservation updated successfully', 'success')
-            return redirect(url_for('admin.reservation_detail', reservation_id=reservation_id))
-        except Exception as e:
-            flash(f'Error updating reservation: {str(e)}', 'error')
+        # Update reservation fields
+        reservation.customer_name = request.form.get('customer_name', reservation.customer_name)
+        reservation.customer_phone = request.form.get('customer_phone', reservation.customer_phone)
+        reservation.party_size = int(request.form.get('party_size', reservation.party_size))
+        reservation.special_requests = request.form.get('special_requests', '')
+        reservation.table_number = request.form.get('table_number', '')
+        
+        # Update date/time
+        date_str = request.form.get('date')
+        time_str = request.form.get('time')
+        if date_str and time_str:
+            try:
+                reservation.reservation_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                reservation.reservation_time = datetime.strptime(time_str, '%H:%M').time()
+            except ValueError:
+                flash('Invalid date or time format.', 'danger')
+                return render_template('admin/edit_reservation.html', reservation=reservation)
+        
+        reservation.save()
+        flash('Reservation updated successfully.', 'success')
+        return redirect(url_for('admin.reservations'))
     
-    return render_template('admin/edit_reservation.html', reservation=reservation, now=datetime.now())
+    return render_template('admin/edit_reservation.html', reservation=reservation)
 
-
-@admin_bp.route('/reservations/<int:reservation_id>/cancel', methods=['POST'])
-@admin_required
-def cancel_reservation(reservation_id):
-    """Cancel a reservation."""
-    db = get_db()
+@admin_bp.route('/reservations/<int:reservation_id>/delete', methods=['POST'])
+@login_required
+def delete_reservation(reservation_id):
+    """Delete a reservation"""
+    from models import Reservation
     
-    if db.cancel_reservation(reservation_id):
-        flash('Reservation cancelled successfully', 'success')
-    else:
-        flash('Failed to cancel reservation', 'error')
-    
-    return redirect(request.referrer or url_for('admin.reservations'))
-
-
-@admin_bp.route('/reservations/<int:reservation_id>/confirm', methods=['POST'])
-@admin_required
-def confirm_reservation(reservation_id):
-    """Confirm/restore a reservation."""
-    db = get_db()
-    
-    reservation = db.update_reservation(reservation_id, status='confirmed')
+    reservation = Reservation.get_by_id(reservation_id)
     if reservation:
-        flash('Reservation confirmed successfully', 'success')
+        reservation.delete()
+        flash('Reservation deleted.', 'success')
     else:
-        flash('Failed to confirm reservation', 'error')
+        flash('Reservation not found.', 'danger')
     
-    return redirect(request.referrer or url_for('admin.reservations'))
+    return redirect(url_for('admin.reservations'))
 
-
-@admin_bp.route('/reservations/<int:reservation_id>/complete', methods=['POST'])
-@admin_required
-def complete_reservation(reservation_id):
-    """Mark a reservation as completed."""
-    db = get_db()
-    
-    reservation = db.update_reservation(reservation_id, status='completed')
-    if reservation:
-        flash('Reservation marked as completed', 'success')
-    else:
-        flash('Failed to update reservation', 'error')
-    
-    return redirect(request.referrer or url_for('admin.reservations'))
-
-
-# =============================================================================
-# Calendar View Routes
-# =============================================================================
+# ============================================================================
+# CALENDAR VIEW
+# ============================================================================
 
 @admin_bp.route('/calendar')
-@admin_required
+@login_required
 def calendar():
-    """Calendar view of reservations."""
-    return render_template('admin/calendar.html', now=datetime.now())
-
+    """Calendar view of reservations"""
+    return render_template('admin/calendar.html')
 
 @admin_bp.route('/api/calendar-events')
-@admin_required
+@login_required
 def calendar_events():
-    """API endpoint for calendar events (JSON)."""
-    db = get_db()
+    """API endpoint for calendar events"""
+    from models import Reservation
     
-    # Get date range from query params
-    start = request.args.get('start')
-    end = request.args.get('end')
+    start = request.args.get('start', '')
+    end = request.args.get('end', '')
     
-    all_reservations = db.get_all_reservations(include_cancelled=False)
+    # Get all reservations (or filter by date range if provided)
+    reservations_list = Reservation.get_all()
     
-    # Filter by date range if provided
-    if start and end:
-        try:
-            start_date = datetime.fromisoformat(start.replace('Z', '+00:00')).replace(tzinfo=None)
-            end_date = datetime.fromisoformat(end.replace('Z', '+00:00')).replace(tzinfo=None)
-            all_reservations = [r for r in all_reservations 
-                               if r.date_time and start_date <= r.date_time <= end_date]
-        except ValueError:
-            pass
-    
-    # Convert to calendar events
     events = []
-    for r in all_reservations:
-        if r.date_time:
-            color = '#28a745' if r.status == 'confirmed' else '#6c757d'
-            if r.status == 'completed':
-                color = '#17a2b8'
-            
-            events.append({
-                'id': r.id,
-                'title': f"{r.user_name} ({r.number_of_guests} guests)",
-                'start': r.date_time.isoformat(),
-                'end': (r.date_time + timedelta(hours=r.time_slot or 2)).isoformat(),
-                'color': color,
-                'extendedProps': {
-                    'phone': r.phone_number,
-                    'guests': r.number_of_guests,
-                    'status': r.status
-                }
-            })
+    for res in reservations_list:
+        # Combine date and time for event
+        event_datetime = datetime.combine(res.reservation_date, res.reservation_time)
+        
+        # Color based on status
+        color_map = {
+            'pending': '#ffc107',
+            'confirmed': '#28a745',
+            'cancelled': '#dc3545',
+            'completed': '#17a2b8',
+            'no-show': '#6c757d'
+        }
+        
+        events.append({
+            'id': res.id,
+            'title': f'{res.customer_name} ({res.party_size})',
+            'start': event_datetime.isoformat(),
+            'backgroundColor': color_map.get(res.status, '#6c757d'),
+            'borderColor': color_map.get(res.status, '#6c757d'),
+            'extendedProps': {
+                'phone': res.customer_phone,
+                'party_size': res.party_size,
+                'status': res.status,
+                'special_requests': res.special_requests or '',
+                'table_number': res.table_number or ''
+            }
+        })
     
     return jsonify(events)
 
+# ============================================================================
+# PRICING & PLANS
+# ============================================================================
 
-# =============================================================================
-# Admin User Management Routes
-# =============================================================================
+@admin_bp.route('/pricing')
+@login_required
+def pricing():
+    """Pricing and plans page"""
+    plans = [
+        {
+            'name': 'Starter',
+            'price': 29,
+            'currency': 'EUR',
+            'period': 'month',
+            'features': [
+                'Up to 100 reservations/month',
+                'Basic chatbot widget',
+                'Email notifications',
+                'Standard support',
+                '1 restaurant location'
+            ],
+            'highlighted': False
+        },
+        {
+            'name': 'Professional',
+            'price': 79,
+            'currency': 'EUR',
+            'period': 'month',
+            'features': [
+                'Up to 500 reservations/month',
+                'Voice + text chatbot',
+                'SMS & email notifications',
+                'Priority support',
+                'Up to 3 locations',
+                'Staff assistant chatbot',
+                'Advanced analytics'
+            ],
+            'highlighted': True
+        },
+        {
+            'name': 'Enterprise',
+            'price': 199,
+            'currency': 'EUR',
+            'period': 'month',
+            'features': [
+                'Unlimited reservations',
+                'Full AI capabilities',
+                'All notification channels',
+                '24/7 dedicated support',
+                'Unlimited locations',
+                'Custom integrations',
+                'White-label option',
+                'API access'
+            ],
+            'highlighted': False
+        }
+    ]
+    
+    return render_template('admin/pricing.html', plans=plans)
+
+# ============================================================================
+# USER MANAGEMENT
+# ============================================================================
 
 @admin_bp.route('/users')
-@superadmin_required
-def admin_users():
-    """List all admin users."""
-    db = get_db()
-    admins = db.get_all_admins()
-    return render_template('admin/users.html', admins=admins, now=datetime.now())
-
-
-@admin_bp.route('/users/new', methods=['GET', 'POST'])
-@superadmin_required
-def new_admin_user():
-    """Create a new admin user."""
-    if request.method == 'POST':
-        try:
-            db = get_db()
-            
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '')
-            confirm_password = request.form.get('confirm_password', '')
-            email = request.form.get('email', '').strip() or None
-            full_name = request.form.get('full_name', '').strip() or None
-            is_superadmin = request.form.get('is_superadmin') == 'on'
-            
-            # Validation
-            if not username:
-                flash('Username is required', 'error')
-                return render_template('admin/user_form.html', admin=None, now=datetime.now())
-            
-            if not password:
-                flash('Password is required', 'error')
-                return render_template('admin/user_form.html', admin=None, now=datetime.now())
-            
-            if password != confirm_password:
-                flash('Passwords do not match', 'error')
-                return render_template('admin/user_form.html', admin=None, now=datetime.now())
-            
-            if len(password) < 6:
-                flash('Password must be at least 6 characters', 'error')
-                return render_template('admin/user_form.html', admin=None, now=datetime.now())
-            
-            # Create admin
-            admin = db.create_admin(
-                username=username,
-                password=password,
-                email=email,
-                full_name=full_name,
-                is_superadmin=is_superadmin
-            )
-            
-            flash(f'Admin user "{username}" created successfully', 'success')
-            return redirect(url_for('admin.admin_users'))
-            
-        except ValueError as e:
-            flash(str(e), 'error')
-        except Exception as e:
-            flash(f'Error creating admin user: {str(e)}', 'error')
+@login_required
+def users():
+    """User management page"""
+    # Check if current user is admin
+    if session.get('admin_role') != 'admin':
+        flash('You do not have permission to manage users.', 'danger')
+        return redirect(url_for('admin.dashboard'))
     
-    return render_template('admin/user_form.html', admin=None, now=datetime.now())
-
-
-@admin_bp.route('/users/<int:admin_id>/edit', methods=['GET', 'POST'])
-@superadmin_required
-def edit_admin_user(admin_id):
-    """Edit an admin user."""
-    db = get_db()
-    admin = db.get_admin_by_id(admin_id)
+    from models import AdminUser
+    users_list = AdminUser.get_all()
     
-    if not admin:
-        flash('Admin user not found', 'error')
-        return redirect(url_for('admin.admin_users'))
-    
-    if request.method == 'POST':
-        try:
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '')
-            confirm_password = request.form.get('confirm_password', '')
-            email = request.form.get('email', '').strip() or None
-            full_name = request.form.get('full_name', '').strip() or None
-            is_superadmin = request.form.get('is_superadmin') == 'on'
-            is_active = request.form.get('is_active') == 'on'
-            
-            # Validation
-            if not username:
-                flash('Username is required', 'error')
-                return render_template('admin/user_form.html', admin=admin, now=datetime.now())
-            
-            if password and password != confirm_password:
-                flash('Passwords do not match', 'error')
-                return render_template('admin/user_form.html', admin=admin, now=datetime.now())
-            
-            if password and len(password) < 6:
-                flash('Password must be at least 6 characters', 'error')
-                return render_template('admin/user_form.html', admin=admin, now=datetime.now())
-            
-            # Update admin
-            update_data = {
-                'username': username,
-                'email': email,
-                'full_name': full_name,
-                'is_superadmin': is_superadmin,
-                'is_active': is_active
-            }
-            
-            if password:
-                update_data['password'] = password
-            
-            db.update_admin(admin_id, **update_data)
-            
-            flash(f'Admin user "{username}" updated successfully', 'success')
-            return redirect(url_for('admin.admin_users'))
-            
-        except ValueError as e:
-            flash(str(e), 'error')
-        except Exception as e:
-            flash(f'Error updating admin user: {str(e)}', 'error')
-    
-    return render_template('admin/user_form.html', admin=admin, now=datetime.now())
+    return render_template('admin/users.html', users=users_list)
 
-
-@admin_bp.route('/users/<int:admin_id>/delete', methods=['POST'])
-@superadmin_required
-def delete_admin_user(admin_id):
-    """Delete an admin user."""
-    db = get_db()
-    
-    # Prevent self-deletion
-    if admin_id == session.get('admin_id'):
-        flash('You cannot delete your own account', 'error')
-        return redirect(url_for('admin.admin_users'))
-    
-    try:
-        if db.delete_admin(admin_id):
-            flash('Admin user deleted successfully', 'success')
-        else:
-            flash('Admin user not found', 'error')
-    except ValueError as e:
-        flash(str(e), 'error')
-    except Exception as e:
-        flash(f'Error deleting admin user: {str(e)}', 'error')
-    
-    return redirect(url_for('admin.admin_users'))
-
-
-# =============================================================================
-# Profile Routes (for current admin)
-# =============================================================================
-
-@admin_bp.route('/profile', methods=['GET', 'POST'])
-@admin_required
-def profile():
-    """View and edit current admin's profile."""
-    db = get_db()
-    admin = db.get_admin_by_id(session.get('admin_id'))
-    
-    if not admin:
-        flash('Profile not found', 'error')
+@admin_bp.route('/users/create', methods=['GET', 'POST'])
+@login_required
+def create_user():
+    """Create new admin user"""
+    if session.get('admin_role') != 'admin':
+        flash('You do not have permission to create users.', 'danger')
         return redirect(url_for('admin.dashboard'))
     
     if request.method == 'POST':
-        try:
-            email = request.form.get('email', '').strip() or None
-            full_name = request.form.get('full_name', '').strip() or None
-            
-            db.update_admin(admin.id, email=email, full_name=full_name)
-            
-            # Update session
-            session['admin_fullname'] = full_name or admin.username
-            
-            flash('Profile updated successfully', 'success')
-            return redirect(url_for('admin.profile'))
-            
-        except Exception as e:
-            flash(f'Error updating profile: {str(e)}', 'error')
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        role = request.form.get('role', 'staff')
+        
+        if not username or not email or not password:
+            flash('All fields are required.', 'danger')
+            return render_template('admin/create_user.html')
+        
+        from models import AdminUser
+        
+        # Check if username exists
+        if AdminUser.get_by_username(username):
+            flash('Username already exists.', 'danger')
+            return render_template('admin/create_user.html')
+        
+        # Create user
+        user = AdminUser.create(username=username, email=email, password=password, role=role)
+        if user:
+            flash(f'User {username} created successfully.', 'success')
+            return redirect(url_for('admin.users'))
+        else:
+            flash('Error creating user.', 'danger')
     
-    return render_template('admin/profile.html', admin=admin, now=datetime.now())
+    return render_template('admin/create_user.html')
 
+@admin_bp.route('/users/<int:user_id>/delete', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    """Delete admin user"""
+    if session.get('admin_role') != 'admin':
+        flash('You do not have permission to delete users.', 'danger')
+        return redirect(url_for('admin.dashboard'))
+    
+    # Prevent self-deletion
+    if user_id == session.get('admin_user_id'):
+        flash('You cannot delete your own account.', 'danger')
+        return redirect(url_for('admin.users'))
+    
+    from models import AdminUser
+    user = AdminUser.get_by_id(user_id)
+    if user:
+        user.delete()
+        flash('User deleted.', 'success')
+    else:
+        flash('User not found.', 'danger')
+    
+    return redirect(url_for('admin.users'))
 
-@admin_bp.route('/profile/password', methods=['GET', 'POST'])
-@admin_required
-def change_password():
-    """Change current admin's password."""
-    if request.method == 'POST':
+# ============================================================================
+# STAFF ASSISTANT CHATBOT
+# ============================================================================
+
+@admin_bp.route('/staff-assistant')
+@login_required
+def staff_assistant():
+    """Staff assistant chatbot interface"""
+    return render_template('admin/staff_assistant.html')
+
+@admin_bp.route('/api/staff-chat', methods=['POST'])
+@login_required
+def staff_chat():
+    """API endpoint for staff chatbot"""
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        
+        if not message:
+            return jsonify({'error': 'No message provided'}), 400
+        
+        # Import and use staff chatbot
+        from staff_chatbot import process_staff_message
+        response = process_staff_message(message, session.get('admin_username', 'Staff'))
+        
+        return jsonify({'response': response})
+    
+    except ImportError:
+        # Fallback if staff_chatbot module not available
+        return jsonify({
+            'response': 'Staff assistant is currently unavailable. Please check the system configuration.'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/api/staff-voice', methods=['POST'])
+@login_required
+def staff_voice():
+    """API endpoint for staff voice input"""
+    try:
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+        
+        audio_file = request.files['audio']
+        
+        # Save temporarily
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as tmp:
+            audio_file.save(tmp.name)
+            tmp_path = tmp.name
+        
         try:
-            db = get_db()
-            admin = db.get_admin_by_id(session.get('admin_id'))
+            # Transcribe with Whisper
+            from openai import OpenAI
+            client = OpenAI()
             
+            with open(tmp_path, 'rb') as f:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=f
+                )
+            
+            transcribed_text = transcript.text
+            
+            # Process with staff chatbot
+            from staff_chatbot import process_staff_message
+            response = process_staff_message(transcribed_text, session.get('admin_username', 'Staff'))
+            
+            return jsonify({
+                'transcription': transcribed_text,
+                'response': response
+            })
+        
+        finally:
+            # Clean up temp file
+            import os
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+    
+    except ImportError:
+        return jsonify({
+            'transcription': '',
+            'response': 'Staff assistant is currently unavailable.'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# PROFILE
+# ============================================================================
+
+@admin_bp.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    """User profile page"""
+    from models import AdminUser
+    
+    user = AdminUser.get_by_id(session.get('admin_user_id'))
+    if not user:
+        flash('User not found.', 'danger')
+        return redirect(url_for('admin.dashboard'))
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        if action == 'update_profile':
+            email = request.form.get('email', '').strip()
+            if email:
+                user.email = email
+                user.save()
+                flash('Profile updated.', 'success')
+        
+        elif action == 'change_password':
             current_password = request.form.get('current_password', '')
             new_password = request.form.get('new_password', '')
             confirm_password = request.form.get('confirm_password', '')
             
-            # Verify current password
-            if not admin.check_password(current_password):
-                flash('Current password is incorrect', 'error')
-                return render_template('admin/change_password.html', now=datetime.now())
-            
-            # Validate new password
-            if not new_password:
-                flash('New password is required', 'error')
-                return render_template('admin/change_password.html', now=datetime.now())
-            
-            if new_password != confirm_password:
-                flash('New passwords do not match', 'error')
-                return render_template('admin/change_password.html', now=datetime.now())
-            
-            if len(new_password) < 6:
-                flash('Password must be at least 6 characters', 'error')
-                return render_template('admin/change_password.html', now=datetime.now())
-            
-            # Change password
-            db.change_admin_password(admin.id, new_password)
-            
-            flash('Password changed successfully', 'success')
-            return redirect(url_for('admin.profile'))
-            
-        except Exception as e:
-            flash(f'Error changing password: {str(e)}', 'error')
+            if not user.check_password(current_password):
+                flash('Current password is incorrect.', 'danger')
+            elif new_password != confirm_password:
+                flash('New passwords do not match.', 'danger')
+            elif len(new_password) < 6:
+                flash('Password must be at least 6 characters.', 'danger')
+            else:
+                user.set_password(new_password)
+                user.save()
+                flash('Password changed successfully.', 'success')
     
-    return render_template('admin/change_password.html', now=datetime.now())
-
-
-# =============================================================================
-# API Routes for AJAX operations
-# =============================================================================
-
-@admin_bp.route('/api/reservations/<int:reservation_id>', methods=['GET'])
-@admin_required
-def api_get_reservation(reservation_id):
-    """API: Get reservation details."""
-    db = get_db()
-    reservation = db.get_reservation_by_id(reservation_id)
-    
-    if not reservation:
-        return jsonify({'error': 'Reservation not found'}), 404
-    
-    return jsonify(reservation.to_dict())
-
-
-@admin_bp.route('/api/reservations/<int:reservation_id>', methods=['PUT'])
-@admin_required
-def api_update_reservation(reservation_id):
-    """API: Update reservation."""
-    db = get_db()
-    data = request.get_json()
-    
-    try:
-        # Parse date_time if provided
-        if 'date_time' in data:
-            data['date_time'] = datetime.fromisoformat(data['date_time'])
-        
-        reservation = db.update_reservation(reservation_id, **data)
-        if reservation:
-            return jsonify(reservation.to_dict())
-        return jsonify({'error': 'Reservation not found'}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-
-@admin_bp.route('/api/stats')
-@admin_required
-def api_stats():
-    """API: Get dashboard stats."""
-    db = get_db()
-    
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow = today + timedelta(days=1)
-    
-    all_reservations = db.get_all_reservations(include_cancelled=True)
-    
-    today_reservations = [r for r in all_reservations 
-                         if r.date_time and today <= r.date_time < tomorrow and r.status == 'confirmed']
-    
-    return jsonify({
-        'today_count': len(today_reservations),
-        'today_guests': sum(r.number_of_guests for r in today_reservations),
-        'total_count': len(all_reservations),
-        'confirmed_count': len([r for r in all_reservations if r.status == 'confirmed']),
-        'cancelled_count': len([r for r in all_reservations if r.status == 'cancelled'])
-    })
-
-
-
-# =============================================================================
-# Staff Assistant Routes
-# =============================================================================
-
-@admin_bp.route('/staff-assistant')
-@admin_required
-def staff_assistant():
-    """Display the staff chatbot interface."""
-    return render_template('admin/staff_chatbot.html')
-
-
-@admin_bp.route('/staff-chat', methods=['POST'])
-@admin_required
-def staff_chat():
-    """Handle staff chatbot text messages."""
-    try:
-        data = request.get_json()
-        message = data.get('message', '')
-        session_id = data.get('session_id', 'default')
-        
-        if not message:
-            return jsonify({'success': False, 'error': 'No message provided'})
-        
-        # Get the staff chatbot instance
-        from staff_chatbot import get_staff_chatbot
-        db = get_db()
-        chatbot = get_staff_chatbot(db)
-        
-        # Process the message
-        response = chatbot.process_message(session_id, message)
-        
-        return jsonify({
-            'success': True,
-            'response': response
-        })
-        
-    except Exception as e:
-        import logging
-        logging.error(f"Staff chat error: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-
-@admin_bp.route('/staff-chat/voice', methods=['POST'])
-@admin_required
-def staff_chat_voice():
-    """Handle staff chatbot voice messages."""
-    try:
-        from openai import OpenAI
-        import tempfile
-        client = OpenAI()
-        
-        # Get the audio file
-        if 'audio' not in request.files:
-            return jsonify({'success': False, 'error': 'No audio file provided'})
-        
-        audio_file = request.files['audio']
-        session_id = request.form.get('session_id', 'default')
-        
-        # Save to temporary file
-        with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as temp_file:
-            audio_file.save(temp_file.name)
-            temp_path = temp_file.name
-        
-        try:
-            # Transcribe with Whisper
-            with open(temp_path, 'rb') as audio:
-                transcription = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio,
-                    language="en"
-                )
-            
-            transcribed_text = transcription.text
-            
-            if not transcribed_text:
-                return jsonify({
-                    'success': False,
-                    'error': 'Could not transcribe audio'
-                })
-            
-            # Get the staff chatbot instance
-            from staff_chatbot import get_staff_chatbot
-            db = get_db()
-            chatbot = get_staff_chatbot(db)
-            
-            # Process the transcribed message
-            response = chatbot.process_message(session_id, transcribed_text)
-            
-            return jsonify({
-                'success': True,
-                'transcription': transcribed_text,
-                'response': response
-            })
-            
-        finally:
-            # Clean up temp file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        
-    except Exception as e:
-        import logging
-        logging.error(f"Staff voice chat error: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-
-@admin_bp.route('/staff-chat/clear', methods=['POST'])
-@admin_required
-def staff_chat_clear():
-    """Clear staff chatbot conversation history."""
-    try:
-        data = request.get_json()
-        session_id = data.get('session_id', 'default')
-        
-        from staff_chatbot import get_staff_chatbot
-        db = get_db()
-        chatbot = get_staff_chatbot(db)
-        chatbot.clear_conversation(session_id)
-        
-        return jsonify({'success': True})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+    return render_template('admin/profile.html', user=user)

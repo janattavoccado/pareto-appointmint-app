@@ -235,6 +235,15 @@
             filter: invert(1);
         }
         
+        .nav-section-title {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 15px 20px 5px 20px;
+            margin-top: 10px;
+        }
+        
         @media (max-width: 768px) {
             .sidebar {
                 width: 100%;
@@ -259,6 +268,7 @@
             </a>
             
             <ul class="nav flex-column mt-3">
+                <!-- Main Navigation -->
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}" 
                        href="{{ url_for('admin.dashboard') }}">
@@ -278,6 +288,35 @@
                        href="{{ url_for('admin.calendar') }}">
                         <i class="bi bi-calendar-week"></i>
                         Calendar
+                    </a>
+                </li>
+                
+                <!-- Tools Section -->
+                <li class="nav-section-title">Tools</li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.staff_assistant' %}active{% endif %}" 
+                       href="{{ url_for('admin.staff_assistant') }}">
+                        <i class="bi bi-robot"></i>
+                        Staff Assistant
+                    </a>
+                </li>
+                
+                <!-- Settings Section -->
+                <li class="nav-section-title">Settings</li>
+                {% if session.get('admin_role') == 'admin' %}
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.users' %}active{% endif %}" 
+                       href="{{ url_for('admin.users') }}">
+                        <i class="bi bi-people"></i>
+                        Users
+                    </a>
+                </li>
+                {% endif %}
+                <li class="nav-item">
+                    <a class="nav-link {% if request.endpoint == 'admin.pricing' %}active{% endif %}" 
+                       href="{{ url_for('admin.pricing') }}">
+                        <i class="bi bi-credit-card"></i>
+                        Pricing & Plans
                     </a>
                 </li>
             </ul>

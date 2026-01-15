@@ -1,54 +1,21 @@
 """
-Staff Chatbot - AI-powered reservation management assistant for restaurant staff
-Supports both text and voice input for managing reservations
+Staff Chatbot - AI Assistant for Restaurant Staff
+Uses OpenAI function calling for natural language reservation management
 """
 
-import os
 import json
-import logging
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+import pytz
 from openai import OpenAI
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 # Initialize OpenAI client
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+client = OpenAI()
 
-# Staff chatbot system prompt
-STAFF_SYSTEM_PROMPT = """You are a helpful AI assistant for restaurant staff to manage table reservations.
-You help staff with the following tasks:
+# Zagreb timezone
+ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
 
-1. **View Reservations**: Show today's reservations, upcoming bookings, or search by name/phone/date
-2. **Update Status**: Mark reservations as confirmed, arrived, seated, completed, or cancelled
-3. **Modify Details**: Update guest count, time, date, name, phone, or special requests
-4. **Quick Info**: Get details about a specific reservation by ID or guest name
-
-Current Date/Time: {current_datetime}
-
-When responding:
-- Be concise and professional
-- Confirm actions taken
-- Show relevant reservation details after updates
-- If multiple reservations match, list them and ask for clarification
-- Use clear formatting for reservation details
-
-Available status values:
-- pending: New reservation, not yet confirmed
-- confirmed: Reservation confirmed by staff
-- arrived: Guest has arrived
-- seated: Guest is seated at table
-- completed: Dining completed, guest has left
-- cancelled: Reservation cancelled
-- no_show: Guest did not arrive
-
-Always respond in a helpful, efficient manner suitable for busy restaurant staff.
-"""
-
-# Tools for the staff chatbot
-STAFF_TOOLS = [
+# Define available functions for the AI
+AVAILABLE_FUNCTIONS = [
     {
         "type": "function",
         "function": {
@@ -56,13 +23,7 @@ STAFF_TOOLS = [
             "description": "Get all reservations for today",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "status_filter": {
-                        "type": "string",
-                        "description": "Optional filter by status (pending, confirmed, arrived, seated, completed, cancelled, no_show)",
-                        "enum": ["pending", "confirmed", "arrived", "seated", "completed", "cancelled", "no_show"]
-                    }
-                },
+                "properties": {},
                 "required": []
             }
         }
@@ -78,11 +39,6 @@ STAFF_TOOLS = [
                     "date": {
                         "type": "string",
                         "description": "Date in YYYY-MM-DD format"
-                    },
-                    "status_filter": {
-                        "type": "string",
-                        "description": "Optional filter by status",
-                        "enum": ["pending", "confirmed", "arrived", "seated", "completed", "cancelled", "no_show"]
                     }
                 },
                 "required": ["date"]
@@ -93,13 +49,13 @@ STAFF_TOOLS = [
         "type": "function",
         "function": {
             "name": "search_reservations",
-            "description": "Search reservations by guest name or phone number",
+            "description": "Search reservations by customer name or phone number",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Guest name or phone number to search for"
+                        "description": "Search query (name or phone)"
                     }
                 },
                 "required": ["query"]
@@ -110,13 +66,13 @@ STAFF_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_reservation_details",
-            "description": "Get full details of a specific reservation by ID",
+            "description": "Get detailed information about a specific reservation by ID",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "reservation_id": {
                         "type": "integer",
-                        "description": "The reservation ID number"
+                        "description": "The reservation ID"
                     }
                 },
                 "required": ["reservation_id"]
@@ -127,62 +83,54 @@ STAFF_TOOLS = [
         "type": "function",
         "function": {
             "name": "update_reservation_status",
-            "description": "Update the status of a reservation (e.g., mark as arrived, completed, cancelled)",
+            "description": "Update the status of a reservation (confirmed, cancelled, completed, no-show)",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "reservation_id": {
                         "type": "integer",
-                        "description": "The reservation ID number"
+                        "description": "The reservation ID"
                     },
-                    "new_status": {
+                    "status": {
                         "type": "string",
-                        "description": "The new status for the reservation",
-                        "enum": ["pending", "confirmed", "arrived", "seated", "completed", "cancelled", "no_show"]
+                        "enum": ["pending", "confirmed", "cancelled", "completed", "no-show"],
+                        "description": "New status for the reservation"
                     }
                 },
-                "required": ["reservation_id", "new_status"]
+                "required": ["reservation_id", "status"]
             }
         }
     },
     {
         "type": "function",
         "function": {
-            "name": "update_reservation_details",
-            "description": "Update reservation details like guest count, time, date, name, phone, or notes",
+            "name": "assign_table",
+            "description": "Assign a table number to a reservation",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "reservation_id": {
                         "type": "integer",
-                        "description": "The reservation ID number"
+                        "description": "The reservation ID"
                     },
-                    "guest_count": {
-                        "type": "integer",
-                        "description": "New number of guests"
-                    },
-                    "reservation_time": {
+                    "table_number": {
                         "type": "string",
-                        "description": "New time in HH:MM format"
-                    },
-                    "reservation_date": {
-                        "type": "string",
-                        "description": "New date in YYYY-MM-DD format"
-                    },
-                    "guest_name": {
-                        "type": "string",
-                        "description": "Updated guest name"
-                    },
-                    "guest_phone": {
-                        "type": "string",
-                        "description": "Updated phone number"
-                    },
-                    "special_requests": {
-                        "type": "string",
-                        "description": "Updated special requests or notes"
+                        "description": "Table number to assign"
                     }
                 },
-                "required": ["reservation_id"]
+                "required": ["reservation_id", "table_number"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_statistics",
+            "description": "Get reservation statistics (total, today, pending, etc.)",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
             }
         }
     },
@@ -190,7 +138,7 @@ STAFF_TOOLS = [
         "type": "function",
         "function": {
             "name": "get_upcoming_reservations",
-            "description": "Get upcoming reservations for the next few hours",
+            "description": "Get upcoming reservations for the next few hours or days",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -202,326 +150,241 @@ STAFF_TOOLS = [
                 "required": []
             }
         }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_reservation_stats",
-            "description": "Get statistics for today's reservations (total, by status, total guests)",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        }
     }
 ]
 
+# Function implementations
+def get_todays_reservations():
+    """Get all reservations for today"""
+    from models import Reservation
+    today = datetime.now(ZAGREB_TZ).date()
+    reservations = Reservation.get_by_date(today)
+    
+    if not reservations:
+        return "No reservations found for today."
+    
+    result = f"Today's reservations ({len(reservations)} total):\n\n"
+    for res in reservations:
+        result += f"• #{res.id} - {res.customer_name} at {res.reservation_time.strftime('%H:%M')}\n"
+        result += f"  Party: {res.party_size} | Status: {res.status}"
+        if res.table_number:
+            result += f" | Table: {res.table_number}"
+        result += "\n"
+    
+    return result
 
-class StaffChatbot:
-    """Staff chatbot for managing restaurant reservations"""
+def get_reservations_by_date(date: str):
+    """Get reservations for a specific date"""
+    from models import Reservation
+    try:
+        target_date = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        return f"Invalid date format. Please use YYYY-MM-DD."
     
-    def __init__(self, db_manager):
-        """Initialize with database manager"""
-        self.db = db_manager
-        self.conversation_history: Dict[str, List[Dict]] = {}
+    reservations = Reservation.get_by_date(target_date)
     
-    def get_conversation(self, session_id: str) -> List[Dict]:
-        """Get or create conversation history for a session"""
-        if session_id not in self.conversation_history:
-            self.conversation_history[session_id] = []
-        return self.conversation_history[session_id]
+    if not reservations:
+        return f"No reservations found for {date}."
     
-    def clear_conversation(self, session_id: str):
-        """Clear conversation history for a session"""
-        if session_id in self.conversation_history:
-            del self.conversation_history[session_id]
+    result = f"Reservations for {date} ({len(reservations)} total):\n\n"
+    for res in reservations:
+        result += f"• #{res.id} - {res.customer_name} at {res.reservation_time.strftime('%H:%M')}\n"
+        result += f"  Party: {res.party_size} | Status: {res.status}\n"
     
-    def format_reservation(self, res: Dict) -> str:
-        """Format a reservation for display"""
-        status_emoji = {
-            'pending': '⏳',
-            'confirmed': '✅',
-            'arrived': '🚶',
-            'seated': '🪑',
-            'completed': '✔️',
-            'cancelled': '❌',
-            'no_show': '👻'
-        }
-        emoji = status_emoji.get(res.get('status', 'pending'), '📋')
-        
-        return f"""
-{emoji} **Reservation #{res.get('id')}**
-• Guest: {res.get('guest_name', 'N/A')}
-• Phone: {res.get('guest_phone', 'N/A')}
-• Date: {res.get('reservation_date', 'N/A')}
-• Time: {res.get('reservation_time', 'N/A')}
-• Guests: {res.get('guest_count', 'N/A')}
-• Status: {res.get('status', 'pending').upper()}
-• Notes: {res.get('special_requests', 'None')}
-"""
-    
-    def execute_tool(self, tool_name: str, args: Dict) -> str:
-        """Execute a tool and return the result"""
-        logger.info(f"Executing tool: {tool_name} with args: {args}")
-        
-        try:
-            if tool_name == "get_todays_reservations":
-                today = datetime.now().strftime('%Y-%m-%d')
-                reservations = self.db.get_reservations_by_date(today)
-                
-                # Apply status filter if provided
-                status_filter = args.get('status_filter')
-                if status_filter:
-                    reservations = [r for r in reservations if r.get('status') == status_filter]
-                
-                if not reservations:
-                    return "No reservations found for today."
-                
-                result = f"**Today's Reservations ({len(reservations)} total):**\n"
-                for res in reservations:
-                    result += self.format_reservation(res)
-                return result
-            
-            elif tool_name == "get_reservations_by_date":
-                date = args.get('date')
-                reservations = self.db.get_reservations_by_date(date)
-                
-                status_filter = args.get('status_filter')
-                if status_filter:
-                    reservations = [r for r in reservations if r.get('status') == status_filter]
-                
-                if not reservations:
-                    return f"No reservations found for {date}."
-                
-                result = f"**Reservations for {date} ({len(reservations)} total):**\n"
-                for res in reservations:
-                    result += self.format_reservation(res)
-                return result
-            
-            elif tool_name == "search_reservations":
-                query = args.get('query', '')
-                reservations = self.db.search_reservations(query)
-                
-                if not reservations:
-                    return f"No reservations found matching '{query}'."
-                
-                result = f"**Search Results for '{query}' ({len(reservations)} found):**\n"
-                for res in reservations:
-                    result += self.format_reservation(res)
-                return result
-            
-            elif tool_name == "get_reservation_details":
-                res_id = args.get('reservation_id')
-                reservation = self.db.get_reservation_by_id(res_id)
-                
-                if not reservation:
-                    return f"Reservation #{res_id} not found."
-                
-                return self.format_reservation(reservation)
-            
-            elif tool_name == "update_reservation_status":
-                res_id = args.get('reservation_id')
-                new_status = args.get('new_status')
-                
-                success = self.db.update_reservation_status(res_id, new_status)
-                
-                if success:
-                    reservation = self.db.get_reservation_by_id(res_id)
-                    return f"✅ Status updated successfully!\n{self.format_reservation(reservation)}"
-                else:
-                    return f"❌ Failed to update reservation #{res_id}. Please check the ID."
-            
-            elif tool_name == "update_reservation_details":
-                res_id = args.get('reservation_id')
-                updates = {k: v for k, v in args.items() if k != 'reservation_id' and v is not None}
-                
-                if not updates:
-                    return "No updates provided."
-                
-                success = self.db.update_reservation(res_id, **updates)
-                
-                if success:
-                    reservation = self.db.get_reservation_by_id(res_id)
-                    return f"✅ Reservation updated successfully!\n{self.format_reservation(reservation)}"
-                else:
-                    return f"❌ Failed to update reservation #{res_id}. Please check the ID."
-            
-            elif tool_name == "get_upcoming_reservations":
-                hours = args.get('hours', 2)
-                now = datetime.now()
-                end_time = now + timedelta(hours=hours)
-                
-                today = now.strftime('%Y-%m-%d')
-                reservations = self.db.get_reservations_by_date(today)
-                
-                # Filter to upcoming reservations
-                upcoming = []
-                for res in reservations:
-                    try:
-                        res_time = datetime.strptime(f"{today} {res.get('reservation_time')}", '%Y-%m-%d %H:%M')
-                        if now <= res_time <= end_time and res.get('status') not in ['completed', 'cancelled', 'no_show']:
-                            upcoming.append(res)
-                    except:
-                        pass
-                
-                if not upcoming:
-                    return f"No upcoming reservations in the next {hours} hours."
-                
-                result = f"**Upcoming Reservations (next {hours} hours):**\n"
-                for res in sorted(upcoming, key=lambda x: x.get('reservation_time', '')):
-                    result += self.format_reservation(res)
-                return result
-            
-            elif tool_name == "get_reservation_stats":
-                today = datetime.now().strftime('%Y-%m-%d')
-                reservations = self.db.get_reservations_by_date(today)
-                
-                stats = {
-                    'total': len(reservations),
-                    'pending': 0,
-                    'confirmed': 0,
-                    'arrived': 0,
-                    'seated': 0,
-                    'completed': 0,
-                    'cancelled': 0,
-                    'no_show': 0,
-                    'total_guests': 0
-                }
-                
-                for res in reservations:
-                    status = res.get('status', 'pending')
-                    if status in stats:
-                        stats[status] += 1
-                    stats['total_guests'] += res.get('guest_count', 0)
-                
-                return f"""
-**Today's Reservation Statistics:**
+    return result
 
-📊 **Total Reservations:** {stats['total']}
-👥 **Total Guests Expected:** {stats['total_guests']}
-
-**By Status:**
-• ⏳ Pending: {stats['pending']}
-• ✅ Confirmed: {stats['confirmed']}
-• 🚶 Arrived: {stats['arrived']}
-• 🪑 Seated: {stats['seated']}
-• ✔️ Completed: {stats['completed']}
-• ❌ Cancelled: {stats['cancelled']}
-• 👻 No-show: {stats['no_show']}
-"""
-            
-            else:
-                return f"Unknown tool: {tool_name}"
-                
-        except Exception as e:
-            logger.error(f"Error executing tool {tool_name}: {e}")
-            return f"Error: {str(e)}"
+def search_reservations(query: str):
+    """Search reservations by name or phone"""
+    from models import Reservation
+    reservations = Reservation.search(query)
     
-    def process_message(self, session_id: str, user_message: str) -> str:
-        """Process a staff message and return the response"""
-        
-        # Get conversation history
-        conversation = self.get_conversation(session_id)
-        
-        # Build system prompt with current datetime
-        system_prompt = STAFF_SYSTEM_PROMPT.format(
-            current_datetime=datetime.now().strftime('%Y-%m-%d %H:%M')
+    if not reservations:
+        return f"No reservations found matching '{query}'."
+    
+    result = f"Found {len(reservations)} reservation(s) matching '{query}':\n\n"
+    for res in reservations:
+        result += f"• #{res.id} - {res.customer_name}\n"
+        result += f"  Date: {res.reservation_date} at {res.reservation_time.strftime('%H:%M')}\n"
+        result += f"  Phone: {res.customer_phone} | Party: {res.party_size} | Status: {res.status}\n\n"
+    
+    return result
+
+def get_reservation_details(reservation_id: int):
+    """Get detailed information about a reservation"""
+    from models import Reservation
+    res = Reservation.get_by_id(reservation_id)
+    
+    if not res:
+        return f"Reservation #{reservation_id} not found."
+    
+    result = f"Reservation #{res.id} Details:\n\n"
+    result += f"Customer: {res.customer_name}\n"
+    result += f"Phone: {res.customer_phone}\n"
+    result += f"Date: {res.reservation_date}\n"
+    result += f"Time: {res.reservation_time.strftime('%H:%M')}\n"
+    result += f"Party Size: {res.party_size}\n"
+    result += f"Status: {res.status}\n"
+    if res.table_number:
+        result += f"Table: {res.table_number}\n"
+    if res.special_requests:
+        result += f"Special Requests: {res.special_requests}\n"
+    result += f"Created: {res.created_at}\n"
+    
+    return result
+
+def update_reservation_status(reservation_id: int, status: str):
+    """Update reservation status"""
+    from models import Reservation
+    res = Reservation.get_by_id(reservation_id)
+    
+    if not res:
+        return f"Reservation #{reservation_id} not found."
+    
+    old_status = res.status
+    res.update_status(status)
+    
+    return f"Reservation #{reservation_id} status updated from '{old_status}' to '{status}'."
+
+def assign_table(reservation_id: int, table_number: str):
+    """Assign table to reservation"""
+    from models import Reservation
+    res = Reservation.get_by_id(reservation_id)
+    
+    if not res:
+        return f"Reservation #{reservation_id} not found."
+    
+    res.table_number = table_number
+    res.save()
+    
+    return f"Table {table_number} assigned to reservation #{reservation_id} ({res.customer_name})."
+
+def get_statistics():
+    """Get reservation statistics"""
+    from models import Reservation
+    stats = Reservation.get_stats()
+    
+    result = "Reservation Statistics:\n\n"
+    result += f"Total Reservations: {stats.get('total', 0)}\n"
+    result += f"Today's Reservations: {stats.get('today', 0)}\n"
+    result += f"Pending: {stats.get('pending', 0)}\n"
+    result += f"Confirmed: {stats.get('confirmed', 0)}\n"
+    result += f"This Week: {stats.get('this_week', 0)}\n"
+    
+    return result
+
+def get_upcoming_reservations(hours: int = 2):
+    """Get upcoming reservations"""
+    from models import Reservation
+    
+    now = datetime.now(ZAGREB_TZ)
+    today = now.date()
+    reservations = Reservation.get_by_date(today)
+    
+    # Filter to upcoming only
+    upcoming = []
+    for res in reservations:
+        res_datetime = datetime.combine(res.reservation_date, res.reservation_time)
+        res_datetime = ZAGREB_TZ.localize(res_datetime)
+        if res_datetime > now and res_datetime < now + timedelta(hours=hours):
+            upcoming.append(res)
+    
+    if not upcoming:
+        return f"No reservations in the next {hours} hour(s)."
+    
+    result = f"Upcoming reservations (next {hours} hours):\n\n"
+    for res in upcoming:
+        result += f"• #{res.id} - {res.customer_name} at {res.reservation_time.strftime('%H:%M')}\n"
+        result += f"  Party: {res.party_size} | Status: {res.status}"
+        if res.table_number:
+            result += f" | Table: {res.table_number}"
+        result += "\n"
+    
+    return result
+
+# Function dispatcher
+FUNCTION_MAP = {
+    "get_todays_reservations": lambda args: get_todays_reservations(),
+    "get_reservations_by_date": lambda args: get_reservations_by_date(args.get("date")),
+    "search_reservations": lambda args: search_reservations(args.get("query")),
+    "get_reservation_details": lambda args: get_reservation_details(args.get("reservation_id")),
+    "update_reservation_status": lambda args: update_reservation_status(args.get("reservation_id"), args.get("status")),
+    "assign_table": lambda args: assign_table(args.get("reservation_id"), args.get("table_number")),
+    "get_statistics": lambda args: get_statistics(),
+    "get_upcoming_reservations": lambda args: get_upcoming_reservations(args.get("hours", 2))
+}
+
+def process_staff_message(message: str, staff_name: str = "Staff") -> str:
+    """
+    Process a message from staff and return AI response
+    Uses OpenAI function calling for reservation management
+    """
+    try:
+        # System prompt for the staff assistant
+        system_prompt = f"""You are a helpful AI assistant for restaurant staff at AppointMint.
+You help staff manage reservations through natural conversation.
+Current time: {datetime.now(ZAGREB_TZ).strftime('%Y-%m-%d %H:%M')} (Zagreb time)
+Staff member: {staff_name}
+
+You can:
+- View today's reservations or reservations for any date
+- Search for reservations by customer name or phone
+- Get details about specific reservations
+- Update reservation status (confirm, cancel, complete, mark no-show)
+- Assign tables to reservations
+- View statistics
+
+Be concise and helpful. When showing reservations, format them clearly.
+If asked about something you can't do, politely explain your capabilities."""
+
+        # Initial API call
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message}
+            ],
+            tools=AVAILABLE_FUNCTIONS,
+            tool_choice="auto"
         )
         
-        # Add user message to conversation
-        conversation.append({
-            "role": "user",
-            "content": user_message
-        })
+        assistant_message = response.choices[0].message
         
-        # Build messages for API call
-        messages = [{"role": "system", "content": system_prompt}] + conversation[-10:]  # Keep last 10 messages
-        
-        try:
-            # Call OpenAI API
-            response = client.chat.completions.create(
+        # Check if the model wants to call functions
+        if assistant_message.tool_calls:
+            # Process each function call
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message},
+                assistant_message
+            ]
+            
+            for tool_call in assistant_message.tool_calls:
+                function_name = tool_call.function.name
+                function_args = json.loads(tool_call.function.arguments)
+                
+                # Execute the function
+                if function_name in FUNCTION_MAP:
+                    function_result = FUNCTION_MAP[function_name](function_args)
+                else:
+                    function_result = f"Unknown function: {function_name}"
+                
+                # Add function result to messages
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": function_result
+                })
+            
+            # Get final response with function results
+            final_response = client.chat.completions.create(
                 model="gpt-4.1-mini",
-                messages=messages,
-                tools=STAFF_TOOLS,
-                tool_choice="auto",
-                temperature=0.3
+                messages=messages
             )
             
-            assistant_message = response.choices[0].message
-            
-            # Check if tool calls are needed
-            if assistant_message.tool_calls:
-                # Execute each tool call
-                tool_results = []
-                for tool_call in assistant_message.tool_calls:
-                    tool_name = tool_call.function.name
-                    tool_args = json.loads(tool_call.function.arguments)
-                    
-                    result = self.execute_tool(tool_name, tool_args)
-                    tool_results.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "content": result
-                    })
-                
-                # Add assistant message and tool results to conversation
-                conversation.append({
-                    "role": "assistant",
-                    "content": assistant_message.content,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments
-                            }
-                        }
-                        for tc in assistant_message.tool_calls
-                    ]
-                })
-                
-                for tr in tool_results:
-                    conversation.append(tr)
-                
-                # Get final response with tool results
-                messages = [{"role": "system", "content": system_prompt}] + conversation[-15:]
-                
-                final_response = client.chat.completions.create(
-                    model="gpt-4.1-mini",
-                    messages=messages,
-                    temperature=0.3
-                )
-                
-                final_content = final_response.choices[0].message.content
-                conversation.append({
-                    "role": "assistant",
-                    "content": final_content
-                })
-                
-                return final_content
-            else:
-                # No tool calls, just return the response
-                content = assistant_message.content
-                conversation.append({
-                    "role": "assistant",
-                    "content": content
-                })
-                return content
-                
-        except Exception as e:
-            logger.error(f"Error processing staff message: {e}")
-            return f"Sorry, I encountered an error: {str(e)}"
-
-
-# Singleton instance (will be initialized with db_manager)
-staff_chatbot_instance: Optional[StaffChatbot] = None
-
-
-def get_staff_chatbot(db_manager) -> StaffChatbot:
-    """Get or create the staff chatbot instance"""
-    global staff_chatbot_instance
-    if staff_chatbot_instance is None:
-        staff_chatbot_instance = StaffChatbot(db_manager)
-    return staff_chatbot_instance
+            return final_response.choices[0].message.content
+        
+        # No function calls, return direct response
+        return assistant_message.content
+    
+    except Exception as e:
+        return f"I encountered an error: {str(e)}. Please try again or contact support."
