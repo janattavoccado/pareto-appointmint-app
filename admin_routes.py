@@ -1,5 +1,6 @@
 """
 Admin Dashboard Routes - Complete Version
+Uses DatabaseManager pattern for database operations.
 Includes: Dashboard, Reservations, Calendar, Pricing, Users, Staff Assistant, Profile
 """
 
@@ -14,6 +15,11 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 # Zagreb timezone
 ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
+
+def get_db():
+    """Get database manager instance."""
+    from models import DatabaseManager
+    return DatabaseManager.get_instance()
 
 def login_required(f):
     """Decorator to require admin login"""
@@ -39,14 +45,18 @@ def login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         
-        from models import AdminUser
-        user = AdminUser.authenticate(username, password)
+        db = get_db()
+        user = db.get_admin_user_by_username(username)
         
-        if user:
+        if user and user.check_password(password):
             session['admin_logged_in'] = True
             session['admin_user_id'] = user.id
             session['admin_username'] = user.username
             session['admin_role'] = user.role
+            
+            # Update last login
+            db.update_admin_user(user.id, last_login=datetime.utcnow())
+            
             flash(f'Welcome back, {user.username}!', 'success')
             return redirect(url_for('admin.dashboard'))
         else:
@@ -69,27 +79,27 @@ def logout():
 # ============================================================================
 
 @admin_bp.route('/')
+@admin_bp.route('/dashboard')
 @login_required
 def dashboard():
     """Main admin dashboard with statistics"""
-    from models import Reservation
+    db = get_db()
     
     now = datetime.now(ZAGREB_TZ)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     
     # Get statistics
-    stats = Reservation.get_stats()
+    stats = db.get_reservation_stats(now)
     
     # Get today's reservations
-    today_reservations = Reservation.get_by_date(now.date())
+    today_reservations = db.get_reservations_by_date(now)
     
-    # Get upcoming reservations (next 7 days)
-    upcoming = Reservation.get_upcoming(days=7, limit=10)
+    # Get upcoming reservations
+    upcoming_reservations = db.get_upcoming_reservations(limit=10)
     
     return render_template('admin/dashboard.html',
                          stats=stats,
                          today_reservations=today_reservations,
-                         upcoming_reservations=upcoming,
+                         upcoming_reservations=upcoming_reservations,
                          current_time=now)
 
 # ============================================================================
@@ -100,7 +110,7 @@ def dashboard():
 @login_required
 def reservations():
     """List all reservations with filtering"""
-    from models import Reservation
+    db = get_db()
     
     # Get filter parameters
     status_filter = request.args.get('status', '')
@@ -109,17 +119,18 @@ def reservations():
     
     # Build query
     if search_query:
-        reservations_list = Reservation.search(search_query)
+        reservations_list = db.search_reservations(search_query)
     elif date_filter:
         try:
-            filter_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
-            reservations_list = Reservation.get_by_date(filter_date)
+            filter_date = datetime.strptime(date_filter, '%Y-%m-%d')
+            reservations_list = db.get_reservations_by_date(filter_date)
         except ValueError:
-            reservations_list = Reservation.get_all()
+            reservations_list = db.get_all_reservations(include_cancelled=True)
     elif status_filter:
-        reservations_list = Reservation.get_by_status(status_filter)
+        all_res = db.get_all_reservations(include_cancelled=True)
+        reservations_list = [r for r in all_res if r.status == status_filter]
     else:
-        reservations_list = Reservation.get_all()
+        reservations_list = db.get_all_reservations(include_cancelled=True)
     
     return render_template('admin/reservations.html',
                          reservations=reservations_list,
@@ -131,9 +142,9 @@ def reservations():
 @login_required
 def reservation_detail(reservation_id):
     """View single reservation details"""
-    from models import Reservation
+    db = get_db()
     
-    reservation = Reservation.get_by_id(reservation_id)
+    reservation = db.get_reservation_by_id(reservation_id)
     if not reservation:
         flash('Reservation not found.', 'danger')
         return redirect(url_for('admin.reservations'))
@@ -144,16 +155,17 @@ def reservation_detail(reservation_id):
 @login_required
 def update_reservation_status(reservation_id):
     """Update reservation status"""
-    from models import Reservation
+    db = get_db()
     
     new_status = request.form.get('status')
-    if new_status not in ['pending', 'confirmed', 'cancelled', 'completed', 'no-show']:
+    valid_statuses = ['pending', 'confirmed', 'cancelled', 'completed', 'no_show', 'arrived', 'seated']
+    
+    if new_status not in valid_statuses:
         flash('Invalid status.', 'danger')
         return redirect(url_for('admin.reservations'))
     
-    reservation = Reservation.get_by_id(reservation_id)
+    reservation = db.update_reservation_status(reservation_id, new_status)
     if reservation:
-        reservation.update_status(new_status)
         flash(f'Reservation status updated to {new_status}.', 'success')
     else:
         flash('Reservation not found.', 'danger')
@@ -164,48 +176,60 @@ def update_reservation_status(reservation_id):
 @login_required
 def edit_reservation(reservation_id):
     """Edit reservation details"""
-    from models import Reservation
+    db = get_db()
     
-    reservation = Reservation.get_by_id(reservation_id)
+    reservation = db.get_reservation_by_id(reservation_id)
     if not reservation:
         flash('Reservation not found.', 'danger')
         return redirect(url_for('admin.reservations'))
     
     if request.method == 'POST':
-        # Update reservation fields
-        reservation.customer_name = request.form.get('customer_name', reservation.customer_name)
-        reservation.customer_phone = request.form.get('customer_phone', reservation.customer_phone)
-        reservation.party_size = int(request.form.get('party_size', reservation.party_size))
-        reservation.special_requests = request.form.get('special_requests', '')
-        reservation.table_number = request.form.get('table_number', '')
+        # Prepare update data
+        update_data = {}
+        
+        if request.form.get('user_name'):
+            update_data['user_name'] = request.form.get('user_name')
+        if request.form.get('phone_number'):
+            update_data['phone_number'] = request.form.get('phone_number')
+        if request.form.get('number_of_guests'):
+            update_data['number_of_guests'] = int(request.form.get('number_of_guests'))
+        if request.form.get('special_requests') is not None:
+            update_data['special_requests'] = request.form.get('special_requests')
+        if request.form.get('table_number') is not None:
+            update_data['table_number'] = request.form.get('table_number')
+        if request.form.get('status'):
+            update_data['status'] = request.form.get('status')
         
         # Update date/time
         date_str = request.form.get('date')
         time_str = request.form.get('time')
         if date_str and time_str:
             try:
-                reservation.reservation_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                reservation.reservation_time = datetime.strptime(time_str, '%H:%M').time()
+                new_datetime = datetime.strptime(f"{date_str} {time_str}", '%Y-%m-%d %H:%M')
+                update_data['date_time'] = new_datetime
             except ValueError:
                 flash('Invalid date or time format.', 'danger')
                 return render_template('admin/edit_reservation.html', reservation=reservation)
         
-        reservation.save()
-        flash('Reservation updated successfully.', 'success')
-        return redirect(url_for('admin.reservations'))
+        # Perform update
+        updated = db.update_reservation(reservation_id, **update_data)
+        if updated:
+            flash('Reservation updated successfully.', 'success')
+            return redirect(url_for('admin.reservations'))
+        else:
+            flash('Error updating reservation.', 'danger')
     
     return render_template('admin/edit_reservation.html', reservation=reservation)
 
 @admin_bp.route('/reservations/<int:reservation_id>/delete', methods=['POST'])
 @login_required
 def delete_reservation(reservation_id):
-    """Delete a reservation"""
-    from models import Reservation
+    """Delete (cancel) a reservation"""
+    db = get_db()
     
-    reservation = Reservation.get_by_id(reservation_id)
-    if reservation:
-        reservation.delete()
-        flash('Reservation deleted.', 'success')
+    result = db.cancel_reservation(reservation_id)
+    if result:
+        flash('Reservation cancelled.', 'success')
     else:
         flash('Reservation not found.', 'danger')
     
@@ -225,37 +249,33 @@ def calendar():
 @login_required
 def calendar_events():
     """API endpoint for calendar events"""
-    from models import Reservation
+    db = get_db()
     
-    start = request.args.get('start', '')
-    end = request.args.get('end', '')
-    
-    # Get all reservations (or filter by date range if provided)
-    reservations_list = Reservation.get_all()
+    # Get all reservations
+    reservations_list = db.get_all_reservations(include_cancelled=False)
     
     events = []
     for res in reservations_list:
-        # Combine date and time for event
-        event_datetime = datetime.combine(res.reservation_date, res.reservation_time)
-        
         # Color based on status
         color_map = {
             'pending': '#ffc107',
             'confirmed': '#28a745',
             'cancelled': '#dc3545',
             'completed': '#17a2b8',
-            'no-show': '#6c757d'
+            'no_show': '#6c757d',
+            'arrived': '#007bff',
+            'seated': '#20c997'
         }
         
         events.append({
             'id': res.id,
-            'title': f'{res.customer_name} ({res.party_size})',
-            'start': event_datetime.isoformat(),
+            'title': f'{res.user_name} ({res.number_of_guests})',
+            'start': res.date_time.isoformat() if res.date_time else None,
             'backgroundColor': color_map.get(res.status, '#6c757d'),
             'borderColor': color_map.get(res.status, '#6c757d'),
             'extendedProps': {
-                'phone': res.customer_phone,
-                'party_size': res.party_size,
+                'phone': res.phone_number,
+                'party_size': res.number_of_guests,
                 'status': res.status,
                 'special_requests': res.special_requests or '',
                 'table_number': res.table_number or ''
@@ -337,8 +357,8 @@ def users():
         flash('You do not have permission to manage users.', 'danger')
         return redirect(url_for('admin.dashboard'))
     
-    from models import AdminUser
-    users_list = AdminUser.get_all()
+    db = get_db()
+    users_list = db.get_all_admin_users()
     
     return render_template('admin/users.html', users=users_list)
 
@@ -360,15 +380,16 @@ def create_user():
             flash('All fields are required.', 'danger')
             return render_template('admin/create_user.html')
         
-        from models import AdminUser
+        db = get_db()
         
         # Check if username exists
-        if AdminUser.get_by_username(username):
+        existing = db.get_admin_user_by_username(username)
+        if existing:
             flash('Username already exists.', 'danger')
             return render_template('admin/create_user.html')
         
         # Create user
-        user = AdminUser.create(username=username, email=email, password=password, role=role)
+        user = db.create_admin_user(username=username, email=email, password=password, role=role)
         if user:
             flash(f'User {username} created successfully.', 'success')
             return redirect(url_for('admin.users'))
@@ -390,10 +411,9 @@ def delete_user(user_id):
         flash('You cannot delete your own account.', 'danger')
         return redirect(url_for('admin.users'))
     
-    from models import AdminUser
-    user = AdminUser.get_by_id(user_id)
-    if user:
-        user.delete()
+    db = get_db()
+    result = db.delete_admin_user(user_id)
+    if result:
         flash('User deleted.', 'success')
     else:
         flash('User not found.', 'danger')
@@ -422,18 +442,68 @@ def staff_chat():
             return jsonify({'error': 'No message provided'}), 400
         
         # Import and use staff chatbot
-        from staff_chatbot import process_staff_message
-        response = process_staff_message(message, session.get('admin_username', 'Staff'))
+        try:
+            from staff_chatbot import process_staff_message
+            response = process_staff_message(message, session.get('admin_username', 'Staff'))
+        except ImportError:
+            # Fallback response if module not available
+            response = process_staff_message_fallback(message)
         
         return jsonify({'response': response})
     
-    except ImportError:
-        # Fallback if staff_chatbot module not available
-        return jsonify({
-            'response': 'Staff assistant is currently unavailable. Please check the system configuration.'
-        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def process_staff_message_fallback(message: str) -> str:
+    """Fallback staff message processor when OpenAI module is not available."""
+    db = get_db()
+    message_lower = message.lower()
+    
+    # Simple keyword-based responses
+    if 'today' in message_lower and 'reservation' in message_lower:
+        now = datetime.now(ZAGREB_TZ)
+        reservations = db.get_reservations_by_date(now)
+        if not reservations:
+            return "No reservations found for today."
+        
+        result = f"Today's reservations ({len(reservations)} total):\n\n"
+        for res in reservations:
+            time_str = res.date_time.strftime('%H:%M') if res.date_time else 'N/A'
+            result += f"• #{res.id} - {res.user_name} at {time_str}\n"
+            result += f"  Party: {res.number_of_guests} | Status: {res.status}\n"
+        return result
+    
+    elif 'statistic' in message_lower or 'stats' in message_lower:
+        now = datetime.now(ZAGREB_TZ)
+        stats = db.get_reservation_stats(now)
+        return f"""Reservation Statistics:
+
+Total Today: {stats.get('total', 0)}
+Pending: {stats.get('pending', 0)}
+Confirmed: {stats.get('confirmed', 0)}
+Completed: {stats.get('completed', 0)}
+Total Guests: {stats.get('total_guests', 0)}"""
+    
+    elif 'search' in message_lower or 'find' in message_lower:
+        # Extract search term (simple approach)
+        words = message.split()
+        search_term = words[-1] if len(words) > 1 else ''
+        if search_term:
+            results = db.search_reservations(search_term)
+            if not results:
+                return f"No reservations found matching '{search_term}'."
+            
+            result = f"Found {len(results)} reservation(s):\n\n"
+            for res in results:
+                result += f"• #{res.id} - {res.user_name} ({res.phone_number})\n"
+            return result
+    
+    return """I can help you with:
+• View today's reservations - "Show today's reservations"
+• Get statistics - "Show statistics"
+• Search reservations - "Search for [name]"
+
+For full AI capabilities, ensure the staff_chatbot module is configured."""
 
 @admin_bp.route('/api/staff-voice', methods=['POST'])
 @login_required
@@ -465,8 +535,11 @@ def staff_voice():
             transcribed_text = transcript.text
             
             # Process with staff chatbot
-            from staff_chatbot import process_staff_message
-            response = process_staff_message(transcribed_text, session.get('admin_username', 'Staff'))
+            try:
+                from staff_chatbot import process_staff_message
+                response = process_staff_message(transcribed_text, session.get('admin_username', 'Staff'))
+            except ImportError:
+                response = process_staff_message_fallback(transcribed_text)
             
             return jsonify({
                 'transcription': transcribed_text,
@@ -475,15 +548,9 @@ def staff_voice():
         
         finally:
             # Clean up temp file
-            import os
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
     
-    except ImportError:
-        return jsonify({
-            'transcription': '',
-            'response': 'Staff assistant is currently unavailable.'
-        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -495,9 +562,9 @@ def staff_voice():
 @login_required
 def profile():
     """User profile page"""
-    from models import AdminUser
+    db = get_db()
     
-    user = AdminUser.get_by_id(session.get('admin_user_id'))
+    user = db.get_admin_user_by_id(session.get('admin_user_id'))
     if not user:
         flash('User not found.', 'danger')
         return redirect(url_for('admin.dashboard'))
@@ -508,8 +575,7 @@ def profile():
         if action == 'update_profile':
             email = request.form.get('email', '').strip()
             if email:
-                user.email = email
-                user.save()
+                db.update_admin_user(user.id, email=email)
                 flash('Profile updated.', 'success')
         
         elif action == 'change_password':
@@ -524,8 +590,10 @@ def profile():
             elif len(new_password) < 6:
                 flash('Password must be at least 6 characters.', 'danger')
             else:
-                user.set_password(new_password)
-                user.save()
+                db.update_admin_user_password(user.id, new_password)
                 flash('Password changed successfully.', 'success')
+        
+        # Refresh user data
+        user = db.get_admin_user_by_id(session.get('admin_user_id'))
     
     return render_template('admin/profile.html', user=user)
