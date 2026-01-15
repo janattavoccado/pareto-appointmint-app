@@ -2,12 +2,18 @@
 Staff Chatbot - AI Assistant for Restaurant Staff
 Uses OpenAI function calling for natural language reservation management
 Uses DatabaseManager pattern for database operations.
+
+VERSION 2.0 - Added logging and update_reservation function for modifying reservation details
 """
 
 import json
+import logging
 from datetime import datetime, timedelta
 import pytz
 from openai import OpenAI
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
 client = OpenAI()
@@ -110,6 +116,43 @@ AVAILABLE_FUNCTIONS = [
     {
         "type": "function",
         "function": {
+            "name": "update_reservation",
+            "description": "Update reservation details like guest name, phone number, number of guests, date/time, or special requests. Use this when staff wants to change any reservation information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reservation_id": {
+                        "type": "integer",
+                        "description": "The reservation ID to update"
+                    },
+                    "user_name": {
+                        "type": "string",
+                        "description": "New guest name (optional)"
+                    },
+                    "phone_number": {
+                        "type": "string",
+                        "description": "New phone number (optional)"
+                    },
+                    "number_of_guests": {
+                        "type": "integer",
+                        "description": "New number of guests (optional)"
+                    },
+                    "date_time": {
+                        "type": "string",
+                        "description": "New date and time in YYYY-MM-DD HH:MM format (optional)"
+                    },
+                    "special_requests": {
+                        "type": "string",
+                        "description": "New special requests (optional)"
+                    }
+                },
+                "required": ["reservation_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "assign_table",
             "description": "Assign a table number to a reservation",
             "parameters": {
@@ -162,6 +205,7 @@ AVAILABLE_FUNCTIONS = [
 # Function implementations
 def get_todays_reservations():
     """Get all reservations for today"""
+    logger.info("Function called: get_todays_reservations")
     db = get_db()
     today = datetime.now(ZAGREB_TZ)
     reservations = db.get_reservations_by_date(today)
@@ -182,6 +226,7 @@ def get_todays_reservations():
 
 def get_reservations_by_date(date: str):
     """Get reservations for a specific date"""
+    logger.info(f"Function called: get_reservations_by_date(date={date})")
     db = get_db()
     try:
         target_date = datetime.strptime(date, '%Y-%m-%d')
@@ -203,6 +248,7 @@ def get_reservations_by_date(date: str):
 
 def search_reservations(query: str):
     """Search reservations by name or phone"""
+    logger.info(f"Function called: search_reservations(query={query})")
     db = get_db()
     reservations = db.search_reservations(query)
     
@@ -221,6 +267,7 @@ def search_reservations(query: str):
 
 def get_reservation_details(reservation_id: int):
     """Get detailed information about a reservation"""
+    logger.info(f"Function called: get_reservation_details(reservation_id={reservation_id})")
     db = get_db()
     res = db.get_reservation_by_id(reservation_id)
     
@@ -248,22 +295,64 @@ def get_reservation_details(reservation_id: int):
 
 def update_reservation_status(reservation_id: int, status: str):
     """Update reservation status"""
+    logger.info(f"Function called: update_reservation_status(reservation_id={reservation_id}, status={status})")
     db = get_db()
     res = db.get_reservation_by_id(reservation_id)
     
     if not res:
+        logger.warning(f"Reservation #{reservation_id} not found")
         return f"Reservation #{reservation_id} not found."
     
     old_status = res.status
+    logger.info(f"Updating reservation #{reservation_id} status from '{old_status}' to '{status}'")
+    
     updated = db.update_reservation_status(reservation_id, status)
     
     if updated:
-        return f"Reservation #{reservation_id} status updated from '{old_status}' to '{status}'."
+        logger.info(f"Successfully updated reservation #{reservation_id} status to '{status}'")
+        return f"✅ Reservation #{reservation_id} status updated from '{old_status}' to '{status}'."
     else:
-        return f"Failed to update reservation #{reservation_id}."
+        logger.error(f"Failed to update reservation #{reservation_id}")
+        return f"❌ Failed to update reservation #{reservation_id}."
+
+def update_reservation(reservation_id: int, **kwargs):
+    """Update reservation details"""
+    logger.info(f"Function called: update_reservation(reservation_id={reservation_id}, kwargs={kwargs})")
+    db = get_db()
+    res = db.get_reservation_by_id(reservation_id)
+    
+    if not res:
+        logger.warning(f"Reservation #{reservation_id} not found")
+        return f"Reservation #{reservation_id} not found."
+    
+    # Handle date_time conversion if provided
+    if 'date_time' in kwargs and kwargs['date_time']:
+        try:
+            kwargs['date_time'] = datetime.strptime(kwargs['date_time'], '%Y-%m-%d %H:%M')
+        except ValueError:
+            return f"Invalid date/time format. Please use YYYY-MM-DD HH:MM."
+    
+    # Filter out None values
+    update_data = {k: v for k, v in kwargs.items() if v is not None}
+    
+    if not update_data:
+        return "No changes specified."
+    
+    logger.info(f"Updating reservation #{reservation_id} with: {update_data}")
+    
+    updated = db.update_reservation(reservation_id, **update_data)
+    
+    if updated:
+        changes = ", ".join([f"{k}={v}" for k, v in update_data.items()])
+        logger.info(f"Successfully updated reservation #{reservation_id}: {changes}")
+        return f"✅ Reservation #{reservation_id} updated: {changes}"
+    else:
+        logger.error(f"Failed to update reservation #{reservation_id}")
+        return f"❌ Failed to update reservation #{reservation_id}."
 
 def assign_table(reservation_id: int, table_number: str):
     """Assign table to reservation"""
+    logger.info(f"Function called: assign_table(reservation_id={reservation_id}, table_number={table_number})")
     db = get_db()
     res = db.get_reservation_by_id(reservation_id)
     
@@ -273,17 +362,19 @@ def assign_table(reservation_id: int, table_number: str):
     updated = db.update_reservation(reservation_id, table_number=table_number)
     
     if updated:
-        return f"Table {table_number} assigned to reservation #{reservation_id} ({res.user_name})."
+        logger.info(f"Table {table_number} assigned to reservation #{reservation_id}")
+        return f"✅ Table {table_number} assigned to reservation #{reservation_id} ({res.user_name})."
     else:
-        return f"Failed to assign table to reservation #{reservation_id}."
+        return f"❌ Failed to assign table to reservation #{reservation_id}."
 
 def get_statistics():
     """Get reservation statistics"""
+    logger.info("Function called: get_statistics")
     db = get_db()
     now = datetime.now(ZAGREB_TZ)
     stats = db.get_reservation_stats(now)
     
-    result = "Reservation Statistics (Today):\n\n"
+    result = "📊 Reservation Statistics (Today):\n\n"
     result += f"Total Reservations: {stats.get('total', 0)}\n"
     result += f"Pending: {stats.get('pending', 0)}\n"
     result += f"Confirmed: {stats.get('confirmed', 0)}\n"
@@ -298,6 +389,7 @@ def get_statistics():
 
 def get_upcoming_reservations(hours: int = 2):
     """Get upcoming reservations"""
+    logger.info(f"Function called: get_upcoming_reservations(hours={hours})")
     db = get_db()
     
     now = datetime.now(ZAGREB_TZ)
@@ -316,7 +408,7 @@ def get_upcoming_reservations(hours: int = 2):
     if not upcoming:
         return f"No reservations in the next {hours} hour(s)."
     
-    result = f"Upcoming reservations (next {hours} hours):\n\n"
+    result = f"⏰ Upcoming reservations (next {hours} hours):\n\n"
     for res in upcoming:
         time_str = res.date_time.strftime('%H:%M') if res.date_time else 'N/A'
         result += f"• #{res.id} - {res.user_name} at {time_str}\n"
@@ -334,6 +426,14 @@ FUNCTION_MAP = {
     "search_reservations": lambda args: search_reservations(args.get("query")),
     "get_reservation_details": lambda args: get_reservation_details(args.get("reservation_id")),
     "update_reservation_status": lambda args: update_reservation_status(args.get("reservation_id"), args.get("status")),
+    "update_reservation": lambda args: update_reservation(
+        args.get("reservation_id"),
+        user_name=args.get("user_name"),
+        phone_number=args.get("phone_number"),
+        number_of_guests=args.get("number_of_guests"),
+        date_time=args.get("date_time"),
+        special_requests=args.get("special_requests")
+    ),
     "assign_table": lambda args: assign_table(args.get("reservation_id"), args.get("table_number")),
     "get_statistics": lambda args: get_statistics(),
     "get_upcoming_reservations": lambda args: get_upcoming_reservations(args.get("hours", 2))
@@ -344,6 +444,8 @@ def process_staff_message(message: str, staff_name: str = "Staff") -> str:
     Process a message from staff and return AI response
     Uses OpenAI function calling for reservation management
     """
+    logger.info(f"Processing staff message from {staff_name}: {message[:100]}...")
+    
     try:
         # System prompt for the staff assistant
         system_prompt = f"""You are a helpful AI assistant for restaurant staff at AppointMint.
@@ -356,10 +458,18 @@ You can:
 - Search for reservations by customer name or phone
 - Get details about specific reservations
 - Update reservation status (confirm, cancel, complete, mark no-show, arrived, seated)
+- Update reservation details (name, phone, guests, date/time, special requests) using update_reservation
 - Assign tables to reservations
 - View statistics
 
-Be concise and helpful. When showing reservations, format them clearly.
+IMPORTANT RULES:
+1. When asked to update or change a reservation, you MUST call the appropriate function:
+   - To change status: use update_reservation_status
+   - To change other details (name, phone, guests, time, special requests): use update_reservation
+2. Always confirm what action you took after calling a function
+3. Be concise and helpful
+4. When showing reservations, format them clearly
+
 If asked about something you can't do, politely explain your capabilities."""
 
         # Initial API call
@@ -377,6 +487,8 @@ If asked about something you can't do, politely explain your capabilities."""
         
         # Check if the model wants to call functions
         if assistant_message.tool_calls:
+            logger.info(f"AI wants to call {len(assistant_message.tool_calls)} function(s)")
+            
             # Process each function call
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -388,11 +500,15 @@ If asked about something you can't do, politely explain your capabilities."""
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
                 
+                logger.info(f"Executing function: {function_name} with args: {function_args}")
+                
                 # Execute the function
                 if function_name in FUNCTION_MAP:
                     function_result = FUNCTION_MAP[function_name](function_args)
+                    logger.info(f"Function result: {function_result[:200] if len(function_result) > 200 else function_result}")
                 else:
                     function_result = f"Unknown function: {function_name}"
+                    logger.warning(f"Unknown function requested: {function_name}")
                 
                 # Add function result to messages
                 messages.append({
@@ -407,10 +523,14 @@ If asked about something you can't do, politely explain your capabilities."""
                 messages=messages
             )
             
-            return final_response.choices[0].message.content
+            result = final_response.choices[0].message.content
+            logger.info(f"Final response: {result[:200] if len(result) > 200 else result}")
+            return result
         
         # No function calls, return direct response
+        logger.info("No function calls, returning direct response")
         return assistant_message.content
     
     except Exception as e:
+        logger.error(f"Error in process_staff_message: {str(e)}", exc_info=True)
         return f"I encountered an error: {str(e)}. Please try again or contact support."
