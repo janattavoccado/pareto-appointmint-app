@@ -1,106 +1,231 @@
 {% extends "admin/base.html" %}
 
 {% block title %}Calendar{% endblock %}
-{% block page_title %}Reservation Calendar{% endblock %}
+{% block page_title %}Calendar{% endblock %}
 
 {% block extra_css %}
 <style>
-    #calendar {
-        background: #fff;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    .fc {
+        --fc-border-color: var(--border-color);
+        --fc-button-bg-color: var(--bg-card);
+        --fc-button-border-color: var(--border-color);
+        --fc-button-text-color: var(--text-primary);
+        --fc-button-hover-bg-color: rgba(0, 212, 255, 0.1);
+        --fc-button-hover-border-color: var(--accent-cyan);
+        --fc-button-active-bg-color: var(--accent-cyan);
+        --fc-button-active-border-color: var(--accent-cyan);
+        --fc-today-bg-color: rgba(0, 212, 255, 0.05);
+        --fc-page-bg-color: transparent;
+        --fc-neutral-bg-color: var(--bg-secondary);
+        --fc-list-event-hover-bg-color: rgba(0, 212, 255, 0.1);
+    }
+    
+    .fc .fc-toolbar-title {
+        color: var(--text-primary);
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    
+    .fc .fc-col-header-cell-cushion {
+        color: var(--text-secondary);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+    }
+    
+    .fc .fc-daygrid-day-number {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+    
+    .fc .fc-daygrid-day.fc-day-today {
+        background: rgba(0, 212, 255, 0.1) !important;
+    }
+    
+    .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+        color: var(--accent-cyan);
+        font-weight: 700;
     }
     
     .fc-event {
+        border: none !important;
+        border-radius: 6px !important;
+        padding: 2px 6px !important;
+        font-size: 0.75rem !important;
+        font-weight: 500 !important;
         cursor: pointer;
-        border: none;
-        padding: 2px 5px;
+        transition: all 0.2s ease;
     }
     
-    .fc-daygrid-event {
+    .fc-event:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    
+    .fc-event-pending {
+        background: rgba(245, 158, 11, 0.2) !important;
+        color: var(--accent-yellow) !important;
+        border-left: 3px solid var(--accent-yellow) !important;
+    }
+    
+    .fc-event-confirmed {
+        background: rgba(16, 185, 129, 0.2) !important;
+        color: var(--accent-green) !important;
+        border-left: 3px solid var(--accent-green) !important;
+    }
+    
+    .fc-event-arrived {
+        background: rgba(59, 130, 246, 0.2) !important;
+        color: var(--accent-blue) !important;
+        border-left: 3px solid var(--accent-blue) !important;
+    }
+    
+    .fc-event-seated {
+        background: rgba(139, 92, 246, 0.2) !important;
+        color: var(--accent-purple) !important;
+        border-left: 3px solid var(--accent-purple) !important;
+    }
+    
+    .fc-event-completed {
+        background: rgba(0, 212, 255, 0.2) !important;
+        color: var(--accent-cyan) !important;
+        border-left: 3px solid var(--accent-cyan) !important;
+    }
+    
+    .fc-event-cancelled {
+        background: rgba(239, 68, 68, 0.2) !important;
+        color: var(--accent-red) !important;
+        border-left: 3px solid var(--accent-red) !important;
+        text-decoration: line-through;
+    }
+    
+    .fc-event-no_show {
+        background: rgba(107, 114, 128, 0.2) !important;
+        color: var(--text-muted) !important;
+        border-left: 3px solid var(--text-muted) !important;
+    }
+    
+    .fc .fc-button {
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+        padding: 0.5rem 1rem !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .fc .fc-button:hover {
+        box-shadow: var(--glow-cyan);
+    }
+    
+    .fc .fc-button-primary:not(:disabled).fc-button-active,
+    .fc .fc-button-primary:not(:disabled):active {
+        background: var(--accent-cyan) !important;
+        color: var(--bg-primary) !important;
+    }
+    
+    .fc-theme-standard td, .fc-theme-standard th {
+        border-color: var(--border-color);
+    }
+    
+    .fc-theme-standard .fc-scrollgrid {
+        border-color: var(--border-color);
+    }
+    
+    /* Legend */
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0.5rem 0;
+    }
+    
+    .legend-dot {
+        width: 12px;
+        height: 12px;
         border-radius: 4px;
     }
     
-    .fc-toolbar-title {
-        font-size: 1.3rem !important;
-        color: #2c3e50;
-    }
-    
-    .fc-button-primary {
-        background-color: #3498db !important;
-        border-color: #3498db !important;
-    }
-    
-    .fc-button-primary:hover {
-        background-color: #2980b9 !important;
-        border-color: #2980b9 !important;
-    }
-    
-    .fc-button-primary:not(:disabled).fc-button-active {
-        background-color: #2c3e50 !important;
-        border-color: #2c3e50 !important;
-    }
-    
-    /* Event popup modal */
-    .event-modal .modal-header {
-        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-        color: #fff;
-    }
-    
-    .event-modal .modal-header .btn-close {
-        filter: brightness(0) invert(1);
-    }
+    .legend-dot.pending { background: var(--accent-yellow); box-shadow: 0 0 8px var(--accent-yellow); }
+    .legend-dot.confirmed { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+    .legend-dot.arrived { background: var(--accent-blue); box-shadow: 0 0 8px var(--accent-blue); }
+    .legend-dot.seated { background: var(--accent-purple); box-shadow: 0 0 8px var(--accent-purple); }
+    .legend-dot.completed { background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); }
+    .legend-dot.cancelled { background: var(--accent-red); box-shadow: 0 0 8px var(--accent-red); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div id="calendar"></div>
-
-<!-- Event Detail Modal -->
-<div class="modal fade event-modal" id="eventModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="bi bi-calendar-event me-2"></i>
-                    <span id="modalTitle">Reservation Details</span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<div class="row g-4">
+    <!-- Calendar -->
+    <div class="col-lg-9">
+        <div class="glass-card">
+            <div id="calendar"></div>
+        </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="col-lg-3">
+        <!-- Today's Summary -->
+        <div class="glass-card mb-4">
+            <div class="glass-card-header">
+                <div class="glass-card-title">
+                    <i class="bi bi-calendar-day" style="color: var(--accent-cyan);"></i>
+                    Today's Summary
+                </div>
             </div>
-            <div class="modal-body">
-                <table class="table table-borderless">
-                    <tr>
-                        <td class="text-muted" width="120">Guest</td>
-                        <td><strong id="modalGuest"></strong></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Date & Time</td>
-                        <td id="modalDateTime"></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Party Size</td>
-                        <td>
-                            <span class="badge bg-secondary">
-                                <i class="bi bi-people-fill"></i> <span id="modalGuests"></span> guests
-                            </span>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Phone</td>
-                        <td id="modalPhone"></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Status</td>
-                        <td><span id="modalStatus" class="badge"></span></td>
-                    </tr>
-                </table>
+            
+            <div class="d-flex flex-column gap-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-secondary">Total Reservations</span>
+                    <span class="fs-4 fw-bold" style="color: var(--accent-cyan);">{{ today_stats.total if today_stats else 0 }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-secondary">Expected Guests</span>
+                    <span class="fs-4 fw-bold" style="color: var(--accent-green);">{{ today_stats.total_guests if today_stats else 0 }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-secondary">Confirmed</span>
+                    <span class="fs-5 fw-semibold" style="color: var(--accent-green);">{{ today_stats.confirmed if today_stats else 0 }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-secondary">Pending</span>
+                    <span class="fs-5 fw-semibold" style="color: var(--accent-yellow);">{{ today_stats.pending if today_stats else 0 }}</span>
+                </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <a href="#" id="modalViewLink" class="btn btn-primary">
-                    <i class="bi bi-eye me-1"></i> View Details
-                </a>
+        </div>
+        
+        <!-- Legend -->
+        <div class="glass-card">
+            <div class="glass-card-header">
+                <div class="glass-card-title">
+                    <i class="bi bi-palette" style="color: var(--accent-green);"></i>
+                    Status Legend
+                </div>
+            </div>
+            
+            <div class="legend-item">
+                <div class="legend-dot pending"></div>
+                <span class="text-secondary">Pending</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot confirmed"></div>
+                <span class="text-secondary">Confirmed</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot arrived"></div>
+                <span class="text-secondary">Arrived</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot seated"></div>
+                <span class="text-secondary">Seated</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot completed"></div>
+                <span class="text-secondary">Completed</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot cancelled"></div>
+                <span class="text-secondary">Cancelled</span>
             </div>
         </div>
     </div>
@@ -108,57 +233,47 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var calendarEl = document.getElementById('calendar');
-    var eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
-    
-    var calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
-        },
-        events: '{{ url_for("admin.calendar_events") }}',
-        eventClick: function(info) {
-            var event = info.event;
-            var props = event.extendedProps;
-            
-            // Populate modal
-            document.getElementById('modalTitle').textContent = event.title;
-            document.getElementById('modalGuest').textContent = event.title.split(' (')[0];
-            document.getElementById('modalDateTime').textContent = event.start.toLocaleString();
-            document.getElementById('modalGuests').textContent = props.guests;
-            document.getElementById('modalPhone').innerHTML = '<a href="tel:' + props.phone + '">' + props.phone + '</a>';
-            
-            // Status badge
-            var statusBadge = document.getElementById('modalStatus');
-            statusBadge.textContent = props.status.charAt(0).toUpperCase() + props.status.slice(1);
-            statusBadge.className = 'badge badge-' + props.status;
-            
-            // View link
-            document.getElementById('modalViewLink').href = '/admin/reservations/' + event.id;
-            
-            eventModal.show();
-        },
-        eventDidMount: function(info) {
-            // Add tooltip
-            info.el.title = info.event.title + '\n' + 
-                           'Time: ' + info.event.start.toLocaleTimeString() + '\n' +
-                           'Status: ' + info.event.extendedProps.status;
-        },
-        dayMaxEvents: 3,
-        moreLinkClick: 'popover',
-        nowIndicator: true,
-        businessHours: {
-            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-            startTime: '11:00',
-            endTime: '23:00'
-        }
+    document.addEventListener('DOMContentLoaded', function() {
+        var calendarEl = document.getElementById('calendar');
+        var calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+            },
+            events: '/admin/api/calendar-events',
+            eventClick: function(info) {
+                window.location.href = '/admin/reservations/' + info.event.id;
+            },
+            eventClassNames: function(arg) {
+                return ['fc-event-' + arg.event.extendedProps.status];
+            },
+            eventContent: function(arg) {
+                return {
+                    html: `<div class="fc-event-main-frame">
+                        <div class="fc-event-time">${arg.timeText}</div>
+                        <div class="fc-event-title-container">
+                            <div class="fc-event-title fc-sticky">
+                                <i class="bi bi-people-fill me-1"></i>${arg.event.extendedProps.guests} - ${arg.event.title}
+                            </div>
+                        </div>
+                    </div>`
+                };
+            },
+            height: 'auto',
+            dayMaxEvents: 3,
+            moreLinkClick: 'popover',
+            nowIndicator: true,
+            businessHours: {
+                daysOfWeek: [1, 2, 3, 4, 5, 6, 0],
+                startTime: '10:00',
+                endTime: '23:00'
+            }
+        });
+        calendar.render();
     });
-    
-    calendar.render();
-});
 </script>
 {% endblock %}

@@ -4,15 +4,19 @@
 {% block page_title %}Reservations{% endblock %}
 
 {% block content %}
-<!-- Filters -->
-<div class="stat-card mb-4">
+<!-- Filters Card -->
+<div class="glass-card mb-4">
     <form method="GET" class="row g-3 align-items-end">
         <div class="col-md-3">
-            <label class="form-label">Date</label>
+            <label class="form-label">
+                <i class="bi bi-calendar3 me-1" style="color: var(--accent-cyan);"></i>Date
+            </label>
             <input type="date" name="date" class="form-control" value="{{ date_filter or '' }}">
         </div>
         <div class="col-md-3">
-            <label class="form-label">Status</label>
+            <label class="form-label">
+                <i class="bi bi-funnel me-1" style="color: var(--accent-green);"></i>Status
+            </label>
             <select name="status" class="form-select">
                 <option value="" {% if not status_filter %}selected{% endif %}>All Status</option>
                 <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
@@ -25,12 +29,14 @@
             </select>
         </div>
         <div class="col-md-4">
-            <label class="form-label">Search</label>
+            <label class="form-label">
+                <i class="bi bi-search me-1" style="color: var(--accent-blue);"></i>Search
+            </label>
             <input type="text" name="search" class="form-control"
                    placeholder="Name, phone, or ID..." value="{{ search_query or '' }}">
         </div>
         <div class="col-md-2">
-            <button type="submit" class="btn btn-primary w-100">
+            <button type="submit" class="btn btn-glow w-100">
                 <i class="bi bi-search me-1"></i> Filter
             </button>
         </div>
@@ -39,19 +45,21 @@
 
 <!-- Reservations Table -->
 <div class="table-container">
-    <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">
-            <i class="bi bi-list-ul me-2"></i>
+    <div class="table-header">
+        <div class="table-title">
+            <i class="bi bi-journal-bookmark-fill"></i>
             All Reservations
-            <span class="badge bg-secondary ms-2">{{ reservations|length }}</span>
-        </h5>
-        <a href="{{ url_for('admin.reservations') }}" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-arrow-counterclockwise"></i> Reset Filters
+            <span class="badge ms-2" style="background: rgba(0, 212, 255, 0.2); color: var(--accent-cyan);">
+                {{ reservations|length }}
+            </span>
+        </div>
+        <a href="{{ url_for('admin.reservations') }}" class="btn btn-outline-glow btn-sm">
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Reset
         </a>
     </div>
 
     <div class="table-responsive">
-        <table class="table table-hover mb-0">
+        <table class="table">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -67,21 +75,30 @@
             <tbody>
                 {% for reservation in reservations %}
                 <tr>
-                    <td><strong>#{{ reservation.id }}</strong></td>
                     <td>
-                        <strong>{{ reservation.date_time.strftime('%Y-%m-%d') if reservation.date_time else 'N/A' }}</strong><br>
+                        <span class="fw-bold" style="color: var(--accent-cyan);">#{{ reservation.id }}</span>
+                    </td>
+                    <td>
+                        <div class="fw-semibold">{{ reservation.date_time.strftime('%Y-%m-%d') if reservation.date_time else 'N/A' }}</div>
                         <small class="text-muted">{{ reservation.date_time.strftime('%H:%M') if reservation.date_time else '' }}</small>
                     </td>
-                    <td>{{ reservation.user_name }}</td>
-                    <td>{{ reservation.phone_number }}</td>
                     <td>
-                        <span class="badge bg-secondary">
-                            <i class="bi bi-people-fill"></i> {{ reservation.number_of_guests }}
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="user-avatar" style="width: 32px; height: 32px; font-size: 0.75rem;">
+                                {{ reservation.user_name[0]|upper if reservation.user_name else '?' }}
+                            </div>
+                            <span>{{ reservation.user_name }}</span>
+                        </div>
+                    </td>
+                    <td class="text-muted">{{ reservation.phone_number }}</td>
+                    <td>
+                        <span class="badge-status badge-confirmed">
+                            <i class="bi bi-people-fill me-1"></i>{{ reservation.number_of_guests }}
                         </span>
                     </td>
                     <td>
-                        <span class="badge badge-{{ reservation.status }}">
-                            {{ reservation.status|capitalize }}
+                        <span class="badge-status badge-{{ reservation.status }}">
+                            {{ reservation.status|replace('_', ' ')|capitalize }}
                         </span>
                     </td>
                     <td>
@@ -90,20 +107,20 @@
                         </small>
                     </td>
                     <td>
-                        <div class="btn-group">
+                        <div class="d-flex gap-1">
                             <a href="{{ url_for('admin.reservation_detail', reservation_id=reservation.id) }}"
-                               class="btn btn-sm btn-outline-primary" title="View">
+                               class="btn-icon" title="View">
                                 <i class="bi bi-eye"></i>
                             </a>
                             <a href="{{ url_for('admin.edit_reservation', reservation_id=reservation.id) }}"
-                               class="btn btn-sm btn-outline-secondary" title="Edit">
+                               class="btn-icon" title="Edit">
                                 <i class="bi bi-pencil"></i>
                             </a>
                             {% if reservation.status != 'cancelled' %}
                             <form action="{{ url_for('admin.delete_reservation', reservation_id=reservation.id) }}"
                                   method="POST" class="d-inline"
                                   onsubmit="return confirm('Are you sure you want to cancel this reservation?');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancel">
+                                <button type="submit" class="btn-icon danger" title="Cancel">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
                             </form>
@@ -111,7 +128,7 @@
                             <form action="{{ url_for('admin.update_reservation_status', reservation_id=reservation.id) }}"
                                   method="POST" class="d-inline">
                                 <input type="hidden" name="status" value="confirmed">
-                                <button type="submit" class="btn btn-sm btn-outline-success" title="Restore">
+                                <button type="submit" class="btn-icon" title="Restore" style="color: var(--accent-green);">
                                     <i class="bi bi-arrow-counterclockwise"></i>
                                 </button>
                             </form>
@@ -121,12 +138,14 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="text-center py-5 text-muted">
-                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-                        No reservations found
-                        {% if date_filter or status_filter or search_query %}
-                        <br><small>Try adjusting your filters</small>
-                        {% endif %}
+                    <td colspan="8" class="text-center py-5">
+                        <div class="text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-3 opacity-50"></i>
+                            <p class="mb-1">No reservations found</p>
+                            {% if date_filter or status_filter or search_query %}
+                            <small>Try adjusting your filters</small>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

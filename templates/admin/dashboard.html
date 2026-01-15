@@ -4,17 +4,19 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+<!-- Stats Row -->
 <div class="row g-4 mb-4">
     <!-- Today's Reservations -->
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-value">{{ stats.total }}</div>
-                    <div class="stat-label">Today's Reservations</div>
-                </div>
-                <div class="stat-icon bg-primary bg-opacity-10 text-primary">
-                    <i class="bi bi-calendar-day"></i>
+        <div class="stat-card cyan">
+            <div class="stat-icon cyan">
+                <i class="bi bi-calendar-check"></i>
+            </div>
+            <div class="stat-value cyan">{{ stats.total }}</div>
+            <div class="stat-label">Today's Reservations</div>
+            <div class="mt-3">
+                <div class="progress">
+                    <div class="progress-bar cyan" style="width: 100%"></div>
                 </div>
             </div>
         </div>
@@ -22,29 +24,15 @@
     
     <!-- Today's Guests -->
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-value">{{ stats.total_guests }}</div>
-                    <div class="stat-label">Guests Today</div>
-                </div>
-                <div class="stat-icon bg-success bg-opacity-10 text-success">
-                    <i class="bi bi-people"></i>
-                </div>
+        <div class="stat-card green">
+            <div class="stat-icon green">
+                <i class="bi bi-people"></i>
             </div>
-        </div>
-    </div>
-    
-    <!-- Pending -->
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-value">{{ stats.pending }}</div>
-                    <div class="stat-label">Pending</div>
-                </div>
-                <div class="stat-icon bg-warning bg-opacity-10 text-warning">
-                    <i class="bi bi-hourglass-split"></i>
+            <div class="stat-value green">{{ stats.total_guests }}</div>
+            <div class="stat-label">Guests Today</div>
+            <div class="mt-3">
+                <div class="progress">
+                    <div class="progress-bar green" style="width: 75%"></div>
                 </div>
             </div>
         </div>
@@ -52,14 +40,31 @@
     
     <!-- Confirmed -->
     <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-value">{{ stats.confirmed }}</div>
-                    <div class="stat-label">Confirmed</div>
+        <div class="stat-card blue">
+            <div class="stat-icon blue">
+                <i class="bi bi-check-circle"></i>
+            </div>
+            <div class="stat-value blue">{{ stats.confirmed }}</div>
+            <div class="stat-label">Confirmed</div>
+            <div class="mt-3">
+                <div class="progress">
+                    <div class="progress-bar blue" style="width: {{ (stats.confirmed / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
                 </div>
-                <div class="stat-icon bg-success bg-opacity-10 text-success">
-                    <i class="bi bi-check-circle"></i>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pending -->
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card purple">
+            <div class="stat-icon purple">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+            <div class="stat-value" style="color: var(--accent-purple);">{{ stats.pending }}</div>
+            <div class="stat-label">Pending</div>
+            <div class="mt-3">
+                <div class="progress">
+                    <div class="progress-bar" style="background: var(--accent-purple); width: {{ (stats.pending / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
                 </div>
             </div>
         </div>
@@ -67,22 +72,25 @@
 </div>
 
 <div class="row g-4">
-    <!-- Upcoming Reservations -->
+    <!-- Upcoming Reservations Table -->
     <div class="col-lg-8">
         <div class="table-container">
-            <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Upcoming Reservations</h5>
-                <a href="{{ url_for('admin.reservations') }}" class="btn btn-sm btn-outline-primary">
-                    View All <i class="bi bi-arrow-right"></i>
+            <div class="table-header">
+                <div class="table-title">
+                    <i class="bi bi-clock-history"></i>
+                    Upcoming Reservations
+                </div>
+                <a href="{{ url_for('admin.reservations') }}" class="btn btn-outline-glow btn-sm">
+                    View All <i class="bi bi-arrow-right ms-1"></i>
                 </a>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table">
                     <thead>
                         <tr>
                             <th>Date & Time</th>
                             <th>Guest</th>
-                            <th>Party Size</th>
+                            <th>Party</th>
                             <th>Phone</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -92,37 +100,48 @@
                         {% for reservation in upcoming_reservations %}
                         <tr>
                             <td>
-                                <strong>{{ reservation.date_time.strftime('%Y-%m-%d') }}</strong><br>
+                                <div class="fw-semibold">{{ reservation.date_time.strftime('%Y-%m-%d') }}</div>
                                 <small class="text-muted">{{ reservation.date_time.strftime('%H:%M') }}</small>
                             </td>
-                            <td>{{ reservation.user_name }}</td>
                             <td>
-                                <span class="badge bg-secondary">
-                                    <i class="bi bi-people-fill"></i> {{ reservation.number_of_guests }}
-                                </span>
-                            </td>
-                            <td>{{ reservation.phone_number }}</td>
-                            <td>
-                                <span class="badge badge-{{ reservation.status }}">
-                                    {{ reservation.status|capitalize }}
-                                </span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="user-avatar" style="width: 32px; height: 32px; font-size: 0.75rem;">
+                                        {{ reservation.user_name[0]|upper }}
+                                    </div>
+                                    <span>{{ reservation.user_name }}</span>
+                                </div>
                             </td>
                             <td>
-                                <a href="{{ url_for('admin.reservation_detail', reservation_id=reservation.id) }}" 
-                                   class="btn btn-sm btn-outline-primary btn-action">
-                                    <i class="bi bi-eye"></i>
-                                </a>
-                                <a href="{{ url_for('admin.edit_reservation', reservation_id=reservation.id) }}" 
-                                   class="btn btn-sm btn-outline-secondary btn-action">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
+                                <span class="badge-status badge-confirmed">
+                                    <i class="bi bi-people-fill me-1"></i>{{ reservation.number_of_guests }}
+                                </span>
+                            </td>
+                            <td class="text-muted">{{ reservation.phone_number }}</td>
+                            <td>
+                                <span class="badge-status badge-{{ reservation.status }}">
+                                    {{ reservation.status|replace('_', ' ')|capitalize }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="{{ url_for('admin.reservation_detail', reservation_id=reservation.id) }}" 
+                                       class="btn-icon" title="View">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('admin.edit_reservation', reservation_id=reservation.id) }}" 
+                                       class="btn-icon" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6" class="text-center py-4 text-muted">
-                                <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
-                                No upcoming reservations
+                            <td colspan="6" class="text-center py-5">
+                                <div class="text-muted">
+                                    <i class="bi bi-calendar-x fs-1 d-block mb-2 opacity-50"></i>
+                                    No upcoming reservations
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -132,67 +151,171 @@
         </div>
     </div>
     
-    <!-- Status Summary -->
+    <!-- Status Overview -->
     <div class="col-lg-4">
-        <div class="stat-card">
-            <h5 class="mb-4"><i class="bi bi-pie-chart me-2"></i>Reservation Status</h5>
-            
-            <div class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                    <span><i class="bi bi-check-circle text-success me-2"></i>Confirmed</span>
-                    <strong>{{ stats.confirmed }}</strong>
+        <div class="glass-card h-100">
+            <div class="glass-card-header">
+                <div class="glass-card-title">
+                    <i class="bi bi-pie-chart-fill" style="color: var(--accent-cyan);"></i>
+                    Status Overview
                 </div>
-                <div class="progress" style="height: 8px;">
-                    <div class="progress-bar bg-success" style="width: {{ (stats.confirmed / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
+                <span class="glass-card-badge">Live</span>
+            </div>
+            
+            <!-- Status Items -->
+            <div class="d-flex flex-column gap-3">
+                <!-- Confirmed -->
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width: 10px; height: 10px; background: var(--accent-green); border-radius: 50%; box-shadow: 0 0 8px var(--accent-green);"></div>
+                            <span class="text-secondary">Confirmed</span>
+                        </div>
+                        <span class="fw-semibold" style="color: var(--accent-green);">{{ stats.confirmed }}</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar green" style="width: {{ (stats.confirmed / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
+                    </div>
+                </div>
+                
+                <!-- Arrived -->
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width: 10px; height: 10px; background: var(--accent-blue); border-radius: 50%; box-shadow: 0 0 8px var(--accent-blue);"></div>
+                            <span class="text-secondary">Arrived</span>
+                        </div>
+                        <span class="fw-semibold" style="color: var(--accent-blue);">{{ stats.arrived }}</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar blue" style="width: {{ (stats.arrived / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
+                    </div>
+                </div>
+                
+                <!-- Completed -->
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width: 10px; height: 10px; background: var(--accent-cyan); border-radius: 50%; box-shadow: 0 0 8px var(--accent-cyan);"></div>
+                            <span class="text-secondary">Completed</span>
+                        </div>
+                        <span class="fw-semibold" style="color: var(--accent-cyan);">{{ stats.completed }}</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar cyan" style="width: {{ (stats.completed / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
+                    </div>
+                </div>
+                
+                <!-- Cancelled -->
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width: 10px; height: 10px; background: var(--accent-red); border-radius: 50%; box-shadow: 0 0 8px var(--accent-red);"></div>
+                            <span class="text-secondary">Cancelled</span>
+                        </div>
+                        <span class="fw-semibold" style="color: var(--accent-red);">{{ stats.cancelled }}</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar" style="background: var(--accent-red); width: {{ (stats.cancelled / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
+                    </div>
+                </div>
+                
+                <!-- No Show -->
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%;"></div>
+                            <span class="text-secondary">No Show</span>
+                        </div>
+                        <span class="fw-semibold text-muted">{{ stats.no_show }}</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar" style="background: var(--text-muted); width: {{ (stats.no_show / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
+                    </div>
                 </div>
             </div>
             
-            <div class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                    <span><i class="bi bi-check-all text-info me-2"></i>Completed</span>
-                    <strong>{{ stats.completed }}</strong>
-                </div>
-                <div class="progress" style="height: 8px;">
-                    <div class="progress-bar bg-info" style="width: {{ (stats.completed / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
-                </div>
-            </div>
+            <hr class="my-4" style="border-color: var(--border-color);">
             
-            <div class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                    <span><i class="bi bi-x-circle text-danger me-2"></i>Cancelled</span>
-                    <strong>{{ stats.cancelled }}</strong>
-                </div>
-                <div class="progress" style="height: 8px;">
-                    <div class="progress-bar bg-danger" style="width: {{ (stats.cancelled / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
-                </div>
-            </div>
-            
-            <div class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                    <span><i class="bi bi-person-check text-primary me-2"></i>Arrived</span>
-                    <strong>{{ stats.arrived }}</strong>
-                </div>
-                <div class="progress" style="height: 8px;">
-                    <div class="progress-bar bg-primary" style="width: {{ (stats.arrived / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
-                </div>
-            </div>
-            
-            <div class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                    <span><i class="bi bi-emoji-frown text-secondary me-2"></i>No-show</span>
-                    <strong>{{ stats.no_show }}</strong>
-                </div>
-                <div class="progress" style="height: 8px;">
-                    <div class="progress-bar bg-secondary" style="width: {{ (stats.no_show / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
-                </div>
-            </div>
-            
-            <hr>
-            
-            <div class="text-center">
-                <a href="{{ url_for('admin.calendar') }}" class="btn btn-outline-primary">
+            <!-- Quick Actions -->
+            <div class="d-grid gap-2">
+                <a href="{{ url_for('admin.calendar') }}" class="btn btn-outline-glow">
                     <i class="bi bi-calendar3 me-2"></i>View Calendar
                 </a>
+                <a href="{{ url_for('admin.staff_assistant') }}" class="btn btn-glow">
+                    <i class="bi bi-robot me-2"></i>Staff Assistant
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Real-time Activity Section -->
+<div class="row g-4 mt-2">
+    <div class="col-12">
+        <div class="glass-card">
+            <div class="glass-card-header">
+                <div class="glass-card-title">
+                    <i class="bi bi-activity" style="color: var(--accent-green);"></i>
+                    Real Time Activity
+                </div>
+                <span class="glass-card-badge glow-pulse">
+                    <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i>
+                    Tracking
+                </span>
+            </div>
+            
+            <div class="row g-4">
+                <!-- Mini stat cards -->
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center gap-3 p-3" style="background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div class="stat-icon cyan" style="width: 40px; height: 40px; font-size: 1.1rem;">
+                            <i class="bi bi-graph-up-arrow"></i>
+                        </div>
+                        <div>
+                            <div class="fs-4 fw-bold" style="color: var(--accent-cyan);">{{ stats.total }}</div>
+                            <div class="small text-muted">Total Today</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center gap-3 p-3" style="background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div class="stat-icon green" style="width: 40px; height: 40px; font-size: 1.1rem;">
+                            <i class="bi bi-person-check"></i>
+                        </div>
+                        <div>
+                            <div class="fs-4 fw-bold" style="color: var(--accent-green);">{{ stats.arrived + stats.seated }}</div>
+                            <div class="small text-muted">In Restaurant</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center gap-3 p-3" style="background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div class="stat-icon blue" style="width: 40px; height: 40px; font-size: 1.1rem;">
+                            <i class="bi bi-clock-history"></i>
+                        </div>
+                        <div>
+                            <div class="fs-4 fw-bold" style="color: var(--accent-blue);">{{ stats.pending + stats.confirmed }}</div>
+                            <div class="small text-muted">Expected</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="d-flex align-items-center gap-3 p-3" style="background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div class="stat-icon purple" style="width: 40px; height: 40px; font-size: 1.1rem;">
+                            <i class="bi bi-percent"></i>
+                        </div>
+                        <div>
+                            <div class="fs-4 fw-bold" style="color: var(--accent-purple);">
+                                {{ ((stats.completed / stats.total * 100) if stats.total > 0 else 0)|round|int }}%
+                            </div>
+                            <div class="small text-muted">Completion Rate</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
