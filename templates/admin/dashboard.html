@@ -10,7 +10,7 @@
         <div class="stat-card">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="stat-value">{{ stats.today_count }}</div>
+                    <div class="stat-value">{{ stats.total }}</div>
                     <div class="stat-label">Today's Reservations</div>
                 </div>
                 <div class="stat-icon bg-primary bg-opacity-10 text-primary">
@@ -25,7 +25,7 @@
         <div class="stat-card">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="stat-value">{{ stats.today_guests }}</div>
+                    <div class="stat-value">{{ stats.total_guests }}</div>
                     <div class="stat-label">Guests Today</div>
                 </div>
                 <div class="stat-icon bg-success bg-opacity-10 text-success">
@@ -35,31 +35,31 @@
         </div>
     </div>
     
-    <!-- This Week -->
+    <!-- Pending -->
     <div class="col-md-6 col-lg-3">
         <div class="stat-card">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="stat-value">{{ stats.week_count }}</div>
-                    <div class="stat-label">This Week</div>
+                    <div class="stat-value">{{ stats.pending }}</div>
+                    <div class="stat-label">Pending</div>
                 </div>
-                <div class="stat-icon bg-info bg-opacity-10 text-info">
-                    <i class="bi bi-calendar-week"></i>
+                <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                    <i class="bi bi-hourglass-split"></i>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Total Reservations -->
+    <!-- Confirmed -->
     <div class="col-md-6 col-lg-3">
         <div class="stat-card">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <div class="stat-value">{{ stats.total_count }}</div>
-                    <div class="stat-label">Total Reservations</div>
+                    <div class="stat-value">{{ stats.confirmed }}</div>
+                    <div class="stat-label">Confirmed</div>
                 </div>
-                <div class="stat-icon bg-warning bg-opacity-10 text-warning">
-                    <i class="bi bi-database"></i>
+                <div class="stat-icon bg-success bg-opacity-10 text-success">
+                    <i class="bi bi-check-circle"></i>
                 </div>
             </div>
         </div>
@@ -140,30 +140,50 @@
             <div class="mb-3">
                 <div class="d-flex justify-content-between mb-1">
                     <span><i class="bi bi-check-circle text-success me-2"></i>Confirmed</span>
-                    <strong>{{ stats.confirmed_count }}</strong>
+                    <strong>{{ stats.confirmed }}</strong>
                 </div>
                 <div class="progress" style="height: 8px;">
-                    <div class="progress-bar bg-success" style="width: {{ (stats.confirmed_count / stats.total_count * 100) if stats.total_count > 0 else 0 }}%"></div>
+                    <div class="progress-bar bg-success" style="width: {{ (stats.confirmed / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
                 </div>
             </div>
             
             <div class="mb-3">
                 <div class="d-flex justify-content-between mb-1">
                     <span><i class="bi bi-check-all text-info me-2"></i>Completed</span>
-                    <strong>{{ stats.completed_count }}</strong>
+                    <strong>{{ stats.completed }}</strong>
                 </div>
                 <div class="progress" style="height: 8px;">
-                    <div class="progress-bar bg-info" style="width: {{ (stats.completed_count / stats.total_count * 100) if stats.total_count > 0 else 0 }}%"></div>
+                    <div class="progress-bar bg-info" style="width: {{ (stats.completed / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
                 </div>
             </div>
             
             <div class="mb-3">
                 <div class="d-flex justify-content-between mb-1">
                     <span><i class="bi bi-x-circle text-danger me-2"></i>Cancelled</span>
-                    <strong>{{ stats.cancelled_count }}</strong>
+                    <strong>{{ stats.cancelled }}</strong>
                 </div>
                 <div class="progress" style="height: 8px;">
-                    <div class="progress-bar bg-danger" style="width: {{ (stats.cancelled_count / stats.total_count * 100) if stats.total_count > 0 else 0 }}%"></div>
+                    <div class="progress-bar bg-danger" style="width: {{ (stats.cancelled / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                    <span><i class="bi bi-person-check text-primary me-2"></i>Arrived</span>
+                    <strong>{{ stats.arrived }}</strong>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-primary" style="width: {{ (stats.arrived / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                    <span><i class="bi bi-emoji-frown text-secondary me-2"></i>No-show</span>
+                    <strong>{{ stats.no_show }}</strong>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-secondary" style="width: {{ (stats.no_show / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
                 </div>
             </div>
             
