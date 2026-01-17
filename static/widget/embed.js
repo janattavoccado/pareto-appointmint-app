@@ -676,6 +676,40 @@
         },
 
         /**
+         * iOS/Safari detection helpers
+         */
+        _isIOS: function() {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        },
+
+        _isSafari: function() {
+            return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        },
+
+        /**
+         * Get supported MIME type for audio recording
+         */
+        _getSupportedMimeType: function() {
+            var types = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/mp4',
+                'audio/ogg;codecs=opus',
+                'audio/wav'
+            ];
+            
+            for (var i = 0; i < types.length; i++) {
+                if (typeof MediaRecorder !== 'undefined' && 
+                    MediaRecorder.isTypeSupported && 
+                    MediaRecorder.isTypeSupported(types[i])) {
+                    return types[i];
+                }
+            }
+            return 'audio/webm'; // fallback
+        },
+
+        /**
          * Toggle voice recording
          */
         _toggleRecording: async function() {
@@ -687,55 +721,208 @@
         },
 
         /**
-         * Start voice recording
+         * Start voice recording with iOS Safari support
          */
         _startRecording: async function() {
+            var self = this;
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                
-                this._state.mediaRecorder = new MediaRecorder(stream, {
-                    mimeType: 'audio/webm;codecs=opus'
+                var stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
+                    } 
                 });
                 
-                this._state.audioChunks = [];
+                this._state.audioStream = stream;
                 
-                this._state.mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        this._state.audioChunks.push(event.data);
+                // Check if MediaRecorder is supported (not on older iOS)
+                if (typeof MediaRecorder === 'undefined') {
+                    // Fallback for older iOS - use Web Audio API
+                    await this._startRecordingWebAudio(stream);
+                    return;
+                }
+                
+                // Try to use MediaRecorder with a supported MIME type
+                var mimeType = this._getSupportedMimeType();
+                console.log('ParetoBooking: Using MIME type:', mimeType);
+                
+                try {
+                    this._state.mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+                } catch (e) {
+                    console.log('ParetoBooking: MediaRecorder with options failed, trying without:', e);
+                    this._state.mediaRecorder = new MediaRecorder(stream);
+                }
+                
+                this._state.audioChunks = [];
+                this._state.actualMimeType = mimeType;
+                
+                this._state.mediaRecorder.ondataavailable = function(event) {
+                    if (event.data && event.data.size > 0) {
+                        self._state.audioChunks.push(event.data);
                     }
                 };
                 
-                const self = this;
-                this._state.mediaRecorder.onstop = async () => {
-                    stream.getTracks().forEach(track => track.stop());
+                this._state.mediaRecorder.onstop = async function() {
+                    stream.getTracks().forEach(function(track) { track.stop(); });
                     
                     if (self._state.audioChunks.length > 0) {
-                        const audioBlob = new Blob(self._state.audioChunks, { type: 'audio/webm' });
-                        await self._sendAudioMessage(audioBlob);
+                        var actualMimeType = self._state.mediaRecorder.mimeType || self._state.actualMimeType || 'audio/webm';
+                        var audioBlob = new Blob(self._state.audioChunks, { type: actualMimeType });
+                        console.log('ParetoBooking: Recording stopped, blob size:', audioBlob.size, 'type:', actualMimeType);
+                        await self._sendAudioMessage(audioBlob, actualMimeType);
                     }
                 };
                 
-                this._state.mediaRecorder.start();
+                this._state.mediaRecorder.onerror = function(event) {
+                    console.error('ParetoBooking: MediaRecorder error:', event.error);
+                };
+                
+                // Use timeslice for iOS compatibility
+                this._state.mediaRecorder.start(1000);
                 this._state.isRecording = true;
                 
-                // Update UI
+                this._updateRecordingUI(true);
+                
+            } catch (error) {
+                console.error('ParetoBooking: Microphone access error:', error);
+                var errorMsg = 'Could not access microphone. ';
+                if (error.name === 'NotAllowedError') {
+                    errorMsg += 'Please allow microphone access in your browser settings.';
+                    if (this._isIOS()) {
+                        errorMsg += '\n\nOn iOS: Go to Settings > Safari > Microphone and enable it for this site.';
+                    }
+                } else if (error.name === 'NotFoundError') {
+                    errorMsg += 'No microphone found on this device.';
+                } else {
+                    errorMsg += error.message;
+                }
+                alert(errorMsg);
+            }
+        },
+
+        /**
+         * Fallback recording using Web Audio API for older iOS
+         */
+        _startRecordingWebAudio: async function(stream) {
+            var self = this;
+            try {
+                var AudioContext = window.AudioContext || window.webkitAudioContext;
+                this._state.audioContext = new AudioContext({ sampleRate: 44100 });
+                var source = this._state.audioContext.createMediaStreamSource(stream);
+                
+                // Create a script processor (deprecated but works on older iOS)
+                var bufferSize = 4096;
+                this._state.audioProcessor = this._state.audioContext.createScriptProcessor(bufferSize, 1, 1);
+                this._state.audioData = [];
+                
+                this._state.audioProcessor.onaudioprocess = function(e) {
+                    var channelData = e.inputBuffer.getChannelData(0);
+                    self._state.audioData.push(new Float32Array(channelData));
+                };
+                
+                source.connect(this._state.audioProcessor);
+                this._state.audioProcessor.connect(this._state.audioContext.destination);
+                
+                this._state.isRecording = true;
+                this._state.useWebAudioFallback = true;
+                this._updateRecordingUI(true);
+                
+            } catch (error) {
+                console.error('ParetoBooking: Web Audio API recording failed:', error);
+                alert('Voice recording is not supported on this device.');
+            }
+        },
+
+        /**
+         * Create WAV blob from audio data (for Web Audio API fallback)
+         */
+        _createWavBlob: function(audioData, sampleRate) {
+            var length = 0;
+            for (var i = 0; i < audioData.length; i++) {
+                length += audioData[i].length;
+            }
+            var buffer = new Float32Array(length);
+            var offset = 0;
+            for (var i = 0; i < audioData.length; i++) {
+                buffer.set(audioData[i], offset);
+                offset += audioData[i].length;
+            }
+            
+            // Convert to 16-bit PCM
+            var pcmData = new Int16Array(buffer.length);
+            for (var i = 0; i < buffer.length; i++) {
+                var s = Math.max(-1, Math.min(1, buffer[i]));
+                pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            
+            // Create WAV header
+            var wavBuffer = new ArrayBuffer(44 + pcmData.length * 2);
+            var view = new DataView(wavBuffer);
+            
+            // RIFF header
+            this._writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + pcmData.length * 2, true);
+            this._writeString(view, 8, 'WAVE');
+            
+            // fmt chunk
+            this._writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); // PCM
+            view.setUint16(22, 1, true); // Mono
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            
+            // data chunk
+            this._writeString(view, 36, 'data');
+            view.setUint32(40, pcmData.length * 2, true);
+            
+            // Write PCM data
+            var pcmOffset = 44;
+            for (var i = 0; i < pcmData.length; i++) {
+                view.setInt16(pcmOffset + i * 2, pcmData[i], true);
+            }
+            
+            return new Blob([wavBuffer], { type: 'audio/wav' });
+        },
+
+        _writeString: function(view, offset, string) {
+            for (var i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        },
+
+        /**
+         * Update recording UI
+         */
+        _updateRecordingUI: function(recording) {
+            var self = this;
+            if (recording) {
                 this._elements.micBtn.classList.add('recording');
                 this._elements.micBtn.innerHTML = '⏹';
                 this._elements.recordingIndicator.classList.add('active');
                 
                 // Start timer
                 this._state.recordingSeconds = 0;
-                this._state.recordingTimer = setInterval(() => {
-                    this._state.recordingSeconds++;
-                    const minutes = Math.floor(this._state.recordingSeconds / 60);
-                    const seconds = this._state.recordingSeconds % 60;
-                    this._elements.recordingTime.textContent = 
-                        `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                this._state.recordingTimer = setInterval(function() {
+                    self._state.recordingSeconds++;
+                    var minutes = Math.floor(self._state.recordingSeconds / 60);
+                    var seconds = self._state.recordingSeconds % 60;
+                    self._elements.recordingTime.textContent = 
+                        minutes + ':' + seconds.toString().padStart(2, '0');
                 }, 1000);
+            } else {
+                this._elements.micBtn.classList.remove('recording');
+                this._elements.micBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>';
+                this._elements.recordingIndicator.classList.remove('active');
                 
-            } catch (error) {
-                console.error('Microphone access error:', error);
-                alert('Could not access microphone. Please grant permission.');
+                // Stop timer
+                if (this._state.recordingTimer) {
+                    clearInterval(this._state.recordingTimer);
+                    this._state.recordingTimer = null;
+                }
             }
         },
 
@@ -743,22 +930,35 @@
          * Stop voice recording
          */
         _stopRecording: function() {
-            if (this._state.mediaRecorder && this._state.mediaRecorder.state !== 'inactive') {
-                this._state.mediaRecorder.stop();
+            var self = this;
+            if (this._state.isRecording) {
+                if (this._state.useWebAudioFallback) {
+                    // Stop Web Audio API recording
+                    if (this._state.audioProcessor) {
+                        this._state.audioProcessor.disconnect();
+                    }
+                    if (this._state.audioContext) {
+                        this._state.audioContext.close();
+                    }
+                    
+                    // Convert to WAV
+                    if (this._state.audioData && this._state.audioData.length > 0) {
+                        var wavBlob = this._createWavBlob(this._state.audioData, 44100);
+                        this._sendAudioMessage(wavBlob, 'audio/wav');
+                    }
+                    
+                    if (this._state.audioStream) {
+                        this._state.audioStream.getTracks().forEach(function(track) { track.stop(); });
+                    }
+                    
+                    this._state.useWebAudioFallback = false;
+                } else if (this._state.mediaRecorder && this._state.mediaRecorder.state !== 'inactive') {
+                    this._state.mediaRecorder.stop();
+                }
             }
             
             this._state.isRecording = false;
-            
-            // Update UI
-            this._elements.micBtn.classList.remove('recording');
-            this._elements.micBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>';
-            this._elements.recordingIndicator.classList.remove('active');
-            
-            // Stop timer
-            if (this._state.recordingTimer) {
-                clearInterval(this._state.recordingTimer);
-                this._state.recordingTimer = null;
-            }
+            this._updateRecordingUI(false);
         },
 
         /**
@@ -766,13 +966,14 @@
          */
         _cancelRecording: function() {
             this._state.audioChunks = [];
+            this._state.audioData = [];
             this._stopRecording();
         },
 
         /**
-         * Send audio message
+         * Send audio message with iOS support
          */
-        _sendAudioMessage: async function(audioBlob) {
+        _sendAudioMessage: async function(audioBlob, mimeType) {
             // Disable inputs
             this._elements.input.disabled = true;
             this._elements.sendBtn.disabled = true;
@@ -781,18 +982,24 @@
             // Show typing
             this._setTyping(true);
 
+            // Determine file extension based on MIME type
+            var extension = 'webm';
+            if (mimeType && mimeType.indexOf('wav') !== -1) extension = 'wav';
+            else if (mimeType && mimeType.indexOf('mp4') !== -1) extension = 'mp4';
+            else if (mimeType && mimeType.indexOf('ogg') !== -1) extension = 'ogg';
+
             try {
-                const formData = new FormData();
-                formData.append('audio', audioBlob, 'recording.webm');
+                var formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.' + extension);
                 formData.append('assistant_id', this._config.assistantId);
                 formData.append('session_id', this._state.sessionId);
 
-                const response = await fetch(this._config.baseUrl + '/widget/chat/audio', {
+                var response = await fetch(this._config.baseUrl + '/widget/chat/audio', {
                     method: 'POST',
                     body: formData
                 });
 
-                const data = await response.json();
+                var data = await response.json();
 
                 this._setTyping(false);
 
