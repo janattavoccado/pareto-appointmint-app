@@ -39,7 +39,7 @@
         // Default configuration
         _defaults: {
             assistantId: null,
-            position: 'bottom-right',  // bottom-right, bottom-left
+            position: 'bottom-right',  // bottom-right, bottom-left, or 'near-button'
             primaryColor: '#4CAF50',
             textColor: '#ffffff',
             welcomeMessage: 'Hi! I\'m your AI booking assistant. How can I help you today?',
@@ -48,7 +48,10 @@
             buttonTooltip: 'Our AI booking assistant will help you to make a reservation. Please first select location by clicking the "Book a Table" button under chosen location.',
             headerTitle: 'Table Reservation',
             language: 'en',
-            baseUrl: null  // Auto-detected from script src
+            baseUrl: null,  // Auto-detected from script src
+            anchorElement: null,  // Element to position widget near (for 'near-button' position)
+            anchorX: null,  // X coordinate to position widget near
+            anchorY: null   // Y coordinate to position widget near
         },
 
         /**
@@ -129,14 +132,25 @@
         _injectStyles: function() {
             const style = document.createElement('style');
             style.id = 'pareto-booking-styles';
+            // Calculate position based on config
+            let containerPosition = '';
+            if (this._config.anchorElement || this._config.anchorX !== null) {
+                // Dynamic positioning will be applied via JavaScript
+                containerPosition = 'right: 20px; bottom: 20px;';
+            } else if (this._config.position === 'bottom-left') {
+                containerPosition = 'left: 20px; bottom: 20px;';
+            } else {
+                containerPosition = 'right: 20px; bottom: 20px;';
+            }
+            
             style.textContent = `
                 /* Pareto Booking Widget Styles */
                 .pb-widget-container {
                     position: fixed;
-                    ${this._config.position === 'bottom-left' ? 'left: 20px;' : 'right: 20px;'}
-                    bottom: 20px;
+                    ${containerPosition}
                     z-index: 999999;
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+                    transition: left 0.3s ease, right 0.3s ease, top 0.3s ease, bottom 0.3s ease;
                 }
 
                 .pb-chat-button {
@@ -758,7 +772,106 @@
 
             if (isOpen) {
                 this._elements.input.focus();
+                // Position near anchor if specified
+                this._positionNearAnchor();
             }
+        },
+        
+        /**
+         * Position widget near anchor element or coordinates
+         */
+        _positionNearAnchor: function() {
+            const container = this._elements.container;
+            if (!container) return;
+            
+            let anchorRect = null;
+            
+            // Get anchor position from element or coordinates
+            if (this._config.anchorElement) {
+                const anchor = typeof this._config.anchorElement === 'string' 
+                    ? document.querySelector(this._config.anchorElement)
+                    : this._config.anchorElement;
+                if (anchor) {
+                    anchorRect = anchor.getBoundingClientRect();
+                }
+            } else if (this._config.anchorX !== null && this._config.anchorY !== null) {
+                anchorRect = {
+                    left: this._config.anchorX,
+                    right: this._config.anchorX,
+                    top: this._config.anchorY,
+                    bottom: this._config.anchorY,
+                    width: 0,
+                    height: 0
+                };
+            }
+            
+            if (!anchorRect) return;
+            
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const widgetWidth = 380; // Widget width
+            const widgetHeight = 600; // Widget height including button
+            
+            // Calculate position - try to place widget to the right of the anchor
+            let left = anchorRect.right + 20;
+            let top = anchorRect.top;
+            
+            // If widget would go off-screen to the right, place it to the left of anchor
+            if (left + widgetWidth > viewportWidth - 20) {
+                left = anchorRect.left - widgetWidth - 20;
+            }
+            
+            // If still off-screen, center it horizontally
+            if (left < 20) {
+                left = Math.max(20, (viewportWidth - widgetWidth) / 2);
+            }
+            
+            // Adjust vertical position to keep widget in viewport
+            if (top + widgetHeight > viewportHeight - 20) {
+                top = viewportHeight - widgetHeight - 20;
+            }
+            if (top < 20) {
+                top = 20;
+            }
+            
+            // Apply position
+            container.style.left = left + 'px';
+            container.style.right = 'auto';
+            container.style.top = top + 'px';
+            container.style.bottom = 'auto';
+        },
+        
+        /**
+         * Open widget (public API)
+         */
+        open: function(options) {
+            if (options) {
+                // Update anchor position if provided
+                if (options.anchorElement) {
+                    this._config.anchorElement = options.anchorElement;
+                }
+                if (options.anchorX !== undefined) {
+                    this._config.anchorX = options.anchorX;
+                }
+                if (options.anchorY !== undefined) {
+                    this._config.anchorY = options.anchorY;
+                }
+                if (options.event) {
+                    // Get position from click event
+                    const target = options.event.currentTarget || options.event.target;
+                    if (target) {
+                        this._config.anchorElement = target;
+                    }
+                }
+            }
+            this._toggleChat(true);
+        },
+        
+        /**
+         * Close widget (public API)
+         */
+        close: function() {
+            this._toggleChat(false);
         },
 
         /**
