@@ -45,6 +45,41 @@ logger = logging.getLogger(__name__)
 # CET:Zagreb timezone
 ZAGREB_TZ = pytz.timezone('Europe/Zagreb')
 
+# Multilingual confirmation words
+# Supports: English, German, Spanish, Italian, Croatian, French
+CONFIRMATION_WORDS = {
+    # English
+    'confirmed', 'confirm', 'yes', 'yeah', 'yep', 'correct', 'ok', 'okay', 'sure', 'absolutely',
+    'that is correct', 'thats correct', 'right', 'affirmative',
+    # German
+    'bestätigt', 'bestätigen', 'ja', 'jawohl', 'korrekt', 'richtig', 'genau', 'stimmt', 'in ordnung',
+    # Spanish
+    'confirmado', 'confirmar', 'sí', 'si', 'correcto', 'vale', 'bueno', 'perfecto', 'de acuerdo',
+    # Italian
+    'confermato', 'confermare', 'sì', 'corretto', 'va bene', 'perfetto', 'esatto', 'giusto',
+    # Croatian
+    'potvrđeno', 'potvrdi', 'potvrditi', 'da', 'točno', 'u redu', 'uredu', 'dobro', 'ispravno', 'tako je',
+    # French
+    'confirmé', 'confirmer', 'oui', 'ouais', 'd\'accord', 'daccord', 'parfait', 'exactement', 'bien', 'c\'est bon'
+}
+
+
+def is_confirmation(text: str) -> bool:
+    """Check if the text is a confirmation in any supported language."""
+    if not text:
+        return False
+    # Normalize: lowercase, strip whitespace
+    normalized = text.lower().strip()
+    # Check exact match
+    if normalized in CONFIRMATION_WORDS:
+        return True
+    # Check if any confirmation word is contained (for phrases like "yes please")
+    words = normalized.split()
+    for word in words:
+        if word in CONFIRMATION_WORDS:
+            return True
+    return False
+
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
@@ -421,7 +456,7 @@ Extract any of the following information if present:
 - phone: Phone number (any format)
 - special_requests: Any special requests or preferences (window seat, dietary requirements, etc.)
 - wants_reservation: true if user wants to make a reservation, false if asking about something else
-- confirmation: "yes" if user confirms, "no" if user wants to change something, null otherwise
+- confirmation: "yes" if user confirms (including: confirmed, confirm, yes, yeah, ok, okay, ja, sí, si, oui, da, potvrđeno, bestätigt, confermato, confirmado, confirmé), "no" if user wants to change something, null otherwise
 - correction_field: If user wants to correct something, which field (date/time/guests/name/phone/special_requests)
 - correction_value: The new value for the correction
 
@@ -752,14 +787,14 @@ Perfect! Here's your reservation summary:
         if res.special_requests:
             summary += f"\n📝 Special requests: {res.special_requests}"
         
-        summary += "\n\nIs everything correct? (Yes to confirm, or tell me what to change)"
+        summary += "\n\nIs everything correct? Say 'confirmed' to proceed, or tell me what to change."
         return summary
     
     # Step 6: Confirmation
     elif step == ReservationStep.CONFIRM:
         confirmation = extracted.get('confirmation')
         
-        if confirmation == 'yes' or message.lower().strip() in ['yes', 'yeah', 'yep', 'correct', 'confirmed', 'confirm', 'da', 'ok', 'okay']:
+        if confirmation == 'yes' or is_confirmation(message):
             # Create the reservation
             return create_reservation(session, user_id)
         
@@ -801,12 +836,12 @@ Updated! Here's your reservation:
                 if res.special_requests:
                     summary += f"\n📝 Special requests: {res.special_requests}"
                 
-                summary += "\n\nIs this correct now? (Yes to confirm)"
+                summary += "\n\nIs this correct now? Say 'confirmed' to proceed."
                 return summary
             else:
                 return "What would you like to change? Please tell me the field (date, time, guests, name, phone, or special requests) and the new value."
         else:
-            return "Please confirm your reservation by saying 'yes', or tell me what you'd like to change."
+            return "Please confirm your reservation by saying 'confirmed', or tell me what you'd like to change."
     
     # Step 7: Complete (shouldn't normally reach here)
     elif step == ReservationStep.COMPLETE:
