@@ -655,6 +655,12 @@ def process_reservation_step(
                 else:
                     session.step = ReservationStep.COLLECT_GUESTS
                     return f"Wonderful! {res.date} at {res.time}. How many guests will be joining?"
+            elif res.date:
+                # Have date but no time
+                return f"Great choice! What time would you like to arrive on {res.date}?"
+            elif res.time:
+                # Have time but no date
+                return f"Got it, {res.time}. What date would you like to come?"
             else:
                 return f"Welcome to {restaurant_name}! I'd be happy to help you make a reservation. What date and time would you like to visit us?"
         else:

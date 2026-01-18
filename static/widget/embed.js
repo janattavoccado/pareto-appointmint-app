@@ -1359,44 +1359,43 @@
             this._elements.guestPicker.style.display = 'none';
             this._elements.confirmBtn.classList.remove('active');
             
-            // Check what the bot is asking for - date/when questions
-            if (lowerResponse.includes('date') || 
-                lowerResponse.includes('when') || 
-                lowerResponse.includes('which day') ||
-                lowerResponse.includes('like to visit') ||
-                lowerResponse.includes('would you like to come') ||
-                lowerResponse.includes('reservation for')) {
-                this._elements.quickActions.classList.add('active');
-                this._elements.datePicker.style.display = 'flex';
-            } 
-            // Time questions
-            else if (lowerResponse.includes('time') || 
-                     lowerResponse.includes('what time') || 
-                     lowerResponse.includes('o\'clock') ||
-                     lowerResponse.includes('at what hour')) {
-                this._elements.quickActions.classList.add('active');
-                this._elements.timePicker.style.display = 'flex';
-            } 
-            // Guest count questions
-            else if (lowerResponse.includes('how many') || 
-                     lowerResponse.includes('guests') || 
-                     lowerResponse.includes('people') || 
-                     lowerResponse.includes('persons') ||
-                     lowerResponse.includes('party size')) {
-                this._elements.quickActions.classList.add('active');
-                this._elements.guestPicker.style.display = 'flex';
-            } 
-            // Confirmation questions
-            else if (lowerResponse.includes('confirm') || 
-                     lowerResponse.includes('everything correct') || 
-                     lowerResponse.includes('is this correct') ||
-                     lowerResponse.includes('is that correct') ||
-                     lowerResponse.includes('please say') ||
-                     lowerResponse.includes('say confirmed') ||
-                     lowerResponse.includes('to confirm')) {
+            // PRIORITY 1: Confirmation questions (check first to avoid false positives from summary text)
+            // Look for phrases that indicate asking for confirmation
+            if (lowerResponse.includes('everything correct') || 
+                lowerResponse.includes('is this correct') ||
+                lowerResponse.includes('is that correct') ||
+                lowerResponse.includes("say 'confirmed'") ||
+                lowerResponse.includes('say confirmed') ||
+                lowerResponse.includes('to proceed') ||
+                lowerResponse.includes('reservation summary')) {
                 this._elements.quickActions.classList.add('active');
                 this._elements.confirmBtn.classList.add('active');
-            } 
+            }
+            // PRIORITY 2: Time questions (when asking specifically about time)
+            else if ((lowerResponse.includes('what time') || 
+                      lowerResponse.includes('at what hour') ||
+                      lowerResponse.includes('which time')) &&
+                     !lowerResponse.includes('summary')) {
+                this._elements.quickActions.classList.add('active');
+                this._elements.timePicker.style.display = 'flex';
+            }
+            // PRIORITY 3: Date/when questions (only if not a summary and asking for date)
+            else if ((lowerResponse.includes('when would you like') || 
+                      lowerResponse.includes('which day') ||
+                      lowerResponse.includes('what date')) &&
+                     !lowerResponse.includes('summary') &&
+                     !lowerResponse.includes('time:')) {
+                this._elements.quickActions.classList.add('active');
+                this._elements.datePicker.style.display = 'flex';
+            }
+            // PRIORITY 4: Guest count questions
+            else if ((lowerResponse.includes('how many') || 
+                      lowerResponse.includes('number of guests') ||
+                      lowerResponse.includes('party size')) &&
+                     !lowerResponse.includes('summary')) {
+                this._elements.quickActions.classList.add('active');
+                this._elements.guestPicker.style.display = 'flex';
+            }
             else {
                 this._elements.quickActions.classList.remove('active');
             }
