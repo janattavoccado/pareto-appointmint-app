@@ -805,36 +805,58 @@
                 };
             }
             
-            if (!anchorRect) return;
+            // If no anchor, reset to default bottom-right position
+            if (!anchorRect) {
+                container.style.left = 'auto';
+                container.style.right = '20px';
+                container.style.top = 'auto';
+                container.style.bottom = '20px';
+                return;
+            }
             
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            const widgetWidth = 380; // Widget width
-            const widgetHeight = 600; // Widget height including button
+            const widgetWidth = 400; // Widget width including padding
+            const widgetHeight = 600; // Widget height including button and chat window
+            const padding = 20;
             
-            // Calculate position - try to place widget to the right of the anchor
-            let left = anchorRect.right + 20;
-            let top = anchorRect.top;
+            // Calculate horizontal position - try to place widget to the right of the anchor
+            let left = anchorRect.right + padding;
             
             // If widget would go off-screen to the right, place it to the left of anchor
-            if (left + widgetWidth > viewportWidth - 20) {
-                left = anchorRect.left - widgetWidth - 20;
+            if (left + widgetWidth > viewportWidth - padding) {
+                left = anchorRect.left - widgetWidth - padding;
             }
             
-            // If still off-screen, center it horizontally
-            if (left < 20) {
-                left = Math.max(20, (viewportWidth - widgetWidth) / 2);
+            // If still off-screen on the left, center it horizontally
+            if (left < padding) {
+                left = Math.max(padding, (viewportWidth - widgetWidth) / 2);
             }
             
-            // Adjust vertical position to keep widget in viewport
-            if (top + widgetHeight > viewportHeight - 20) {
-                top = viewportHeight - widgetHeight - 20;
-            }
-            if (top < 20) {
-                top = 20;
+            // Calculate vertical position - align with the button, but ensure it fits
+            // Position so the chat window appears above the button area
+            let top = anchorRect.top - 100; // Start a bit above the button
+            
+            // Ensure widget doesn't go above viewport
+            if (top < padding) {
+                top = padding;
             }
             
-            // Apply position
+            // Ensure widget doesn't go below viewport
+            if (top + widgetHeight > viewportHeight - padding) {
+                top = viewportHeight - widgetHeight - padding;
+            }
+            
+            // Final safety check - if still negative, use fixed bottom position
+            if (top < padding) {
+                container.style.left = left + 'px';
+                container.style.right = 'auto';
+                container.style.top = 'auto';
+                container.style.bottom = padding + 'px';
+                return;
+            }
+            
+            // Apply position using left/top (fixed positioning)
             container.style.left = left + 'px';
             container.style.right = 'auto';
             container.style.top = top + 'px';
