@@ -132,12 +132,9 @@
         _injectStyles: function() {
             const style = document.createElement('style');
             style.id = 'pareto-booking-styles';
-            // Calculate position based on config
+            // Calculate position based on config - always use bottom-right or bottom-left
             let containerPosition = '';
-            if (this._config.anchorElement || this._config.anchorX !== null) {
-                // Dynamic positioning will be applied via JavaScript
-                containerPosition = 'right: 20px; bottom: 20px;';
-            } else if (this._config.position === 'bottom-left') {
+            if (this._config.position === 'bottom-left') {
                 containerPosition = 'left: 20px; bottom: 20px;';
             } else {
                 containerPosition = 'right: 20px; bottom: 20px;';
@@ -772,8 +769,6 @@
 
             if (isOpen) {
                 this._elements.input.focus();
-                // Position near anchor if specified
-                this._positionNearAnchor();
             }
         },
         
