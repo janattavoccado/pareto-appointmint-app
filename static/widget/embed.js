@@ -88,6 +88,9 @@
 
             // Add welcome message
             this._addMessage(this._config.welcomeMessage, false);
+            
+            // Show date buttons immediately since welcome message asks about date
+            this._updateQuickActionsVisibility(this._config.welcomeMessage);
 
             this._initialized = true;
             console.log('ParetoBooking widget initialized for:', this._config.assistantId);
@@ -1356,20 +1359,45 @@
             this._elements.guestPicker.style.display = 'none';
             this._elements.confirmBtn.classList.remove('active');
             
-            // Check what the bot is asking for
-            if (lowerResponse.includes('date') || lowerResponse.includes('when') || lowerResponse.includes('which day')) {
+            // Check what the bot is asking for - date/when questions
+            if (lowerResponse.includes('date') || 
+                lowerResponse.includes('when') || 
+                lowerResponse.includes('which day') ||
+                lowerResponse.includes('like to visit') ||
+                lowerResponse.includes('would you like to come') ||
+                lowerResponse.includes('reservation for')) {
                 this._elements.quickActions.classList.add('active');
                 this._elements.datePicker.style.display = 'flex';
-            } else if (lowerResponse.includes('time') || lowerResponse.includes('what time') || lowerResponse.includes('o\'clock')) {
+            } 
+            // Time questions
+            else if (lowerResponse.includes('time') || 
+                     lowerResponse.includes('what time') || 
+                     lowerResponse.includes('o\'clock') ||
+                     lowerResponse.includes('at what hour')) {
                 this._elements.quickActions.classList.add('active');
                 this._elements.timePicker.style.display = 'flex';
-            } else if (lowerResponse.includes('how many') || lowerResponse.includes('guests') || lowerResponse.includes('people') || lowerResponse.includes('persons')) {
+            } 
+            // Guest count questions
+            else if (lowerResponse.includes('how many') || 
+                     lowerResponse.includes('guests') || 
+                     lowerResponse.includes('people') || 
+                     lowerResponse.includes('persons') ||
+                     lowerResponse.includes('party size')) {
                 this._elements.quickActions.classList.add('active');
                 this._elements.guestPicker.style.display = 'flex';
-            } else if (lowerResponse.includes('confirm') || lowerResponse.includes('everything correct') || lowerResponse.includes('is this correct')) {
+            } 
+            // Confirmation questions
+            else if (lowerResponse.includes('confirm') || 
+                     lowerResponse.includes('everything correct') || 
+                     lowerResponse.includes('is this correct') ||
+                     lowerResponse.includes('is that correct') ||
+                     lowerResponse.includes('please say') ||
+                     lowerResponse.includes('say confirmed') ||
+                     lowerResponse.includes('to confirm')) {
                 this._elements.quickActions.classList.add('active');
                 this._elements.confirmBtn.classList.add('active');
-            } else {
+            } 
+            else {
                 this._elements.quickActions.classList.remove('active');
             }
         },
