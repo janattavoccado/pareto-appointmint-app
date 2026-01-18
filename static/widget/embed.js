@@ -448,6 +448,167 @@
                     text-decoration: none;
                 }
 
+                /* Quick action buttons container */
+                .pb-quick-actions {
+                    display: none;
+                    padding: 8px 16px;
+                    background: #f8f9fa;
+                    border-top: 1px solid #e9ecef;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                    justify-content: center;
+                }
+
+                .pb-quick-actions.active {
+                    display: flex;
+                }
+
+                /* Date picker buttons */
+                .pb-date-picker {
+                    display: flex;
+                    gap: 6px;
+                    flex-wrap: wrap;
+                    justify-content: center;
+                    width: 100%;
+                }
+
+                .pb-date-btn {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    padding: 8px 12px;
+                    background: #ffffff;
+                    border: 2px solid #e9ecef;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    min-width: 58px;
+                }
+
+                .pb-date-btn:hover {
+                    border-color: ${this._config.primaryColor};
+                    background: #f0fff0;
+                }
+
+                .pb-date-btn.selected {
+                    border-color: ${this._config.primaryColor};
+                    background: ${this._config.primaryColor};
+                    color: white;
+                }
+
+                .pb-date-btn .day-name {
+                    font-size: 11px;
+                    font-weight: 500;
+                    text-transform: uppercase;
+                    opacity: 0.8;
+                }
+
+                .pb-date-btn .day-num {
+                    font-size: 18px;
+                    font-weight: 700;
+                    line-height: 1.2;
+                }
+
+                .pb-date-btn.selected .day-name,
+                .pb-date-btn.selected .day-num {
+                    color: white;
+                }
+
+                /* Guest count buttons */
+                .pb-guest-picker {
+                    display: flex;
+                    gap: 6px;
+                    flex-wrap: wrap;
+                    justify-content: center;
+                    width: 100%;
+                }
+
+                .pb-guest-btn {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 44px;
+                    height: 44px;
+                    background: #ffffff;
+                    border: 2px solid #e9ecef;
+                    border-radius: 50%;
+                    cursor: pointer;
+                    font-size: 16px;
+                    font-weight: 600;
+                    transition: all 0.2s;
+                }
+
+                .pb-guest-btn:hover {
+                    border-color: ${this._config.primaryColor};
+                    background: #f0fff0;
+                }
+
+                .pb-guest-btn.selected {
+                    border-color: ${this._config.primaryColor};
+                    background: ${this._config.primaryColor};
+                    color: white;
+                }
+
+                /* Confirm button */
+                .pb-confirm-btn {
+                    display: none;
+                    width: 100%;
+                    padding: 14px 24px;
+                    background: linear-gradient(135deg, ${this._config.primaryColor}, #2d8f3d);
+                    color: white;
+                    border: none;
+                    border-radius: 12px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+                }
+
+                .pb-confirm-btn:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+                }
+
+                .pb-confirm-btn.active {
+                    display: block;
+                }
+
+                .pb-confirm-btn::before {
+                    content: '✓ ';
+                }
+
+                /* Time picker buttons */
+                .pb-time-picker {
+                    display: flex;
+                    gap: 6px;
+                    flex-wrap: wrap;
+                    justify-content: center;
+                    width: 100%;
+                }
+
+                .pb-time-btn {
+                    padding: 8px 14px;
+                    background: #ffffff;
+                    border: 2px solid #e9ecef;
+                    border-radius: 20px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 500;
+                    transition: all 0.2s;
+                }
+
+                .pb-time-btn:hover {
+                    border-color: ${this._config.primaryColor};
+                    background: #f0fff0;
+                }
+
+                .pb-time-btn.selected {
+                    border-color: ${this._config.primaryColor};
+                    background: ${this._config.primaryColor};
+                    color: white;
+                }
+
                 /* Mobile responsive */
                 @media (max-width: 480px) {
                     .pb-chat-window {
@@ -489,6 +650,12 @@
                     <span>Recording... <span class="pb-recording-time">0:00</span></span>
                     <button class="pb-cancel-recording" style="margin-left:auto;background:none;border:none;cursor:pointer;">✕</button>
                 </div>
+                <div class="pb-quick-actions">
+                    <div class="pb-date-picker"></div>
+                    <div class="pb-time-picker"></div>
+                    <div class="pb-guest-picker"></div>
+                    <button class="pb-confirm-btn">Confirm Reservation</button>
+                </div>
                 <div class="pb-chat-input-container">
                     <input type="text" class="pb-chat-input" placeholder="${this._config.placeholderText}" />
                     <button class="pb-mic-btn" title="Voice message"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></button>
@@ -523,8 +690,16 @@
                 closeBtn: chatWindow.querySelector('.pb-close-btn'),
                 recordingIndicator: chatWindow.querySelector('.pb-recording-indicator'),
                 recordingTime: chatWindow.querySelector('.pb-recording-time'),
-                cancelRecording: chatWindow.querySelector('.pb-cancel-recording')
+                cancelRecording: chatWindow.querySelector('.pb-cancel-recording'),
+                quickActions: chatWindow.querySelector('.pb-quick-actions'),
+                datePicker: chatWindow.querySelector('.pb-date-picker'),
+                timePicker: chatWindow.querySelector('.pb-time-picker'),
+                guestPicker: chatWindow.querySelector('.pb-guest-picker'),
+                confirmBtn: chatWindow.querySelector('.pb-confirm-btn')
             };
+
+            // Initialize quick action buttons
+            this._initQuickActions();
         },
 
         /**
@@ -625,7 +800,7 @@
          * Send text message
          */
         _sendTextMessage: async function() {
-            const text = this._elements.input.value.trim();
+            var text = this._elements.input.value.trim();
             if (!text) return;
 
             // Clear input
@@ -634,45 +809,8 @@
             // Add user message
             this._addMessage(text, true);
 
-            // Disable input
-            this._elements.input.disabled = true;
-            this._elements.sendBtn.disabled = true;
-
-            // Show typing
-            this._setTyping(true);
-
-            try {
-                const response = await fetch(this._config.baseUrl + '/widget/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        assistant_id: this._config.assistantId,
-                        session_id: this._state.sessionId,
-                        message: text
-                    })
-                });
-
-                const data = await response.json();
-
-                this._setTyping(false);
-
-                if (data.success) {
-                    this._addMessage(data.response, false);
-                } else {
-                    this._addMessage('Sorry, I encountered an error. Please try again.', false);
-                }
-            } catch (error) {
-                this._setTyping(false);
-                this._addMessage('Sorry, I couldn\'t connect. Please check your connection.', false);
-                console.error('ParetoBooking error:', error);
-            }
-
-            // Re-enable input
-            this._elements.input.disabled = false;
-            this._elements.sendBtn.disabled = false;
-            this._elements.input.focus();
+            // Send to server (this handles disabling inputs, typing indicator, etc.)
+            await this._sendToServer(text);
         },
 
         /**
@@ -1022,6 +1160,229 @@
             this._elements.sendBtn.disabled = false;
             this._elements.micBtn.disabled = false;
             this._elements.input.focus();
+        },
+
+        /**
+         * Initialize quick action buttons
+         */
+        _initQuickActions: function() {
+            var self = this;
+            
+            // Generate date buttons for next 5 days
+            this._generateDateButtons();
+            
+            // Generate time buttons
+            this._generateTimeButtons();
+            
+            // Generate guest count buttons
+            this._generateGuestButtons();
+            
+            // Confirm button click handler
+            this._elements.confirmBtn.addEventListener('click', function() {
+                self._sendQuickMessage('confirmed');
+                self._hideQuickActions();
+            });
+        },
+
+        /**
+         * Generate date picker buttons for next 5 days
+         */
+        _generateDateButtons: function() {
+            var self = this;
+            var datePicker = this._elements.datePicker;
+            datePicker.innerHTML = '';
+            
+            var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            var today = new Date();
+            
+            for (var i = 0; i < 5; i++) {
+                var date = new Date(today);
+                date.setDate(today.getDate() + i);
+                
+                var btn = document.createElement('button');
+                btn.className = 'pb-date-btn';
+                btn.dataset.date = date.toISOString().split('T')[0];
+                btn.dataset.dayName = i === 0 ? 'Today' : dayNames[date.getDay()];
+                btn.innerHTML = '<span class="day-name">' + (i === 0 ? 'Today' : dayNames[date.getDay()]) + '</span>' +
+                               '<span class="day-num">' + date.getDate() + '</span>';
+                
+                btn.addEventListener('click', function() {
+                    // Remove selected from siblings
+                    datePicker.querySelectorAll('.pb-date-btn').forEach(function(b) {
+                        b.classList.remove('selected');
+                    });
+                    this.classList.add('selected');
+                    
+                    // Send the date as a message
+                    var dateStr = this.dataset.dayName === 'Today' ? 'today' : this.dataset.dayName + ' ' + this.querySelector('.day-num').textContent;
+                    self._sendQuickMessage(dateStr);
+                });
+                
+                datePicker.appendChild(btn);
+            }
+        },
+
+        /**
+         * Generate time picker buttons
+         */
+        _generateTimeButtons: function() {
+            var self = this;
+            var timePicker = this._elements.timePicker;
+            timePicker.innerHTML = '';
+            
+            var times = ['12:00', '13:00', '18:00', '19:00', '20:00', '21:00'];
+            
+            times.forEach(function(time) {
+                var btn = document.createElement('button');
+                btn.className = 'pb-time-btn';
+                btn.dataset.time = time;
+                btn.textContent = time;
+                
+                btn.addEventListener('click', function() {
+                    // Remove selected from siblings
+                    timePicker.querySelectorAll('.pb-time-btn').forEach(function(b) {
+                        b.classList.remove('selected');
+                    });
+                    this.classList.add('selected');
+                    
+                    // Send the time as a message
+                    self._sendQuickMessage(time);
+                });
+                
+                timePicker.appendChild(btn);
+            });
+        },
+
+        /**
+         * Generate guest count buttons
+         */
+        _generateGuestButtons: function() {
+            var self = this;
+            var guestPicker = this._elements.guestPicker;
+            guestPicker.innerHTML = '';
+            
+            for (var i = 1; i <= 8; i++) {
+                var btn = document.createElement('button');
+                btn.className = 'pb-guest-btn';
+                btn.dataset.guests = i;
+                btn.textContent = i === 8 ? '8+' : i;
+                
+                btn.addEventListener('click', function() {
+                    // Remove selected from siblings
+                    guestPicker.querySelectorAll('.pb-guest-btn').forEach(function(b) {
+                        b.classList.remove('selected');
+                    });
+                    this.classList.add('selected');
+                    
+                    // Send the guest count as a message
+                    var guests = this.dataset.guests;
+                    self._sendQuickMessage(guests + (guests === '1' ? ' person' : ' people'));
+                });
+                
+                guestPicker.appendChild(btn);
+            }
+        },
+
+        /**
+         * Send a quick message from button click
+         */
+        _sendQuickMessage: function(text) {
+            // Add user message to chat
+            this._addMessage(text, true);
+            
+            // Send to server
+            this._sendToServer(text);
+        },
+
+        /**
+         * Send message to server (shared by text and quick messages)
+         */
+        _sendToServer: async function(text) {
+            var self = this;
+            
+            // Disable input
+            this._elements.input.disabled = true;
+            this._elements.sendBtn.disabled = true;
+
+            // Show typing
+            this._setTyping(true);
+
+            try {
+                var response = await fetch(this._config.baseUrl + '/widget/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        assistant_id: this._config.assistantId,
+                        session_id: this._state.sessionId,
+                        message: text
+                    })
+                });
+
+                var data = await response.json();
+
+                this._setTyping(false);
+
+                if (data.success) {
+                    this._addMessage(data.response, false);
+                    
+                    // Check response to show/hide quick actions
+                    this._updateQuickActionsVisibility(data.response);
+                } else {
+                    this._addMessage('Sorry, I encountered an error. Please try again.', false);
+                }
+            } catch (error) {
+                this._setTyping(false);
+                this._addMessage('Sorry, I couldn\'t connect. Please check your connection.', false);
+                console.error('ParetoBooking error:', error);
+            }
+
+            // Re-enable input
+            this._elements.input.disabled = false;
+            this._elements.sendBtn.disabled = false;
+            this._elements.input.focus();
+        },
+
+        /**
+         * Update quick actions visibility based on bot response
+         */
+        _updateQuickActionsVisibility: function(response) {
+            var lowerResponse = response.toLowerCase();
+            
+            // Hide all pickers first
+            this._elements.datePicker.style.display = 'none';
+            this._elements.timePicker.style.display = 'none';
+            this._elements.guestPicker.style.display = 'none';
+            this._elements.confirmBtn.classList.remove('active');
+            
+            // Check what the bot is asking for
+            if (lowerResponse.includes('date') || lowerResponse.includes('when') || lowerResponse.includes('which day')) {
+                this._elements.quickActions.classList.add('active');
+                this._elements.datePicker.style.display = 'flex';
+            } else if (lowerResponse.includes('time') || lowerResponse.includes('what time') || lowerResponse.includes('o\'clock')) {
+                this._elements.quickActions.classList.add('active');
+                this._elements.timePicker.style.display = 'flex';
+            } else if (lowerResponse.includes('how many') || lowerResponse.includes('guests') || lowerResponse.includes('people') || lowerResponse.includes('persons')) {
+                this._elements.quickActions.classList.add('active');
+                this._elements.guestPicker.style.display = 'flex';
+            } else if (lowerResponse.includes('confirm') || lowerResponse.includes('everything correct') || lowerResponse.includes('is this correct')) {
+                this._elements.quickActions.classList.add('active');
+                this._elements.confirmBtn.classList.add('active');
+            } else {
+                this._elements.quickActions.classList.remove('active');
+            }
+        },
+
+        /**
+         * Hide all quick actions
+         */
+        _hideQuickActions: function() {
+            this._elements.quickActions.classList.remove('active');
+            this._elements.datePicker.style.display = 'none';
+            this._elements.timePicker.style.display = 'none';
+            this._elements.guestPicker.style.display = 'none';
+            this._elements.confirmBtn.classList.remove('active');
         },
 
         /**
